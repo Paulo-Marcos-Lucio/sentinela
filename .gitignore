@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Testes / cobertura / caches de ferramentas
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Relatórios gerados localmente
+sentinela-*.html
+sentinela-*.md
+sentinela-*.json
+
+# IDE / SO
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

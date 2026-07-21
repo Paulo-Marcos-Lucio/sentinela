@@ -1,0 +1,16 @@
+.venv/
+.git/
+.github/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+tests/
+docs/
+examples/
+htmlcov/
+.coverage
+sentinela-*.html
+sentinela-*.md
+sentinela-*.json
