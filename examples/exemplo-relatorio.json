@@ -1,0 +1,190 @@
+{
+  "ferramenta": "sentinela",
+  "versao": "0.1.0",
+  "alvo": {
+    "url": "https://paulo-marcos-lucio.github.io/",
+    "host": "paulo-marcos-lucio.github.io",
+    "porta": 443,
+    "esquema": "https"
+  },
+  "modo": "nao-intrusivo",
+  "iniciado_em": "2026-07-21T15:14:58.651550+00:00",
+  "finalizado_em": "2026-07-21T15:14:59.156652+00:00",
+  "duracao_segundos": 0.51,
+  "checagens_executadas": [
+    "security-headers",
+    "transport",
+    "tls",
+    "cookies",
+    "cors",
+    "http-methods",
+    "info-disclosure",
+    "dns-email"
+  ],
+  "nota": {
+    "valor": 70,
+    "conceito": "C",
+    "resumo": "Sem achados críticos ou altos; há oportunidades de endurecimento (hardening) de severidade média/baixa."
+  },
+  "contagem_por_severidade": {
+    "Crítica": 0,
+    "Alta": 0,
+    "Média": 3,
+    "Baixa": 2,
+    "Informativa": 4
+  },
+  "achados": [
+    {
+      "id": "CSP_AUSENTE",
+      "titulo": "Content-Security-Policy ausente",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Média",
+      "severidade_nivel": 2,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-693",
+      "descricao": "A resposta não define uma Content-Security-Policy.",
+      "evidencia": null,
+      "impacto": "A CSP é a defesa em profundidade mais eficaz contra XSS e injeção de conteúdo. Sem ela, qualquer falha de saída não escapada vira execução de script no navegador da vítima.",
+      "recomendacao": "Implante uma CSP restritiva (idealmente baseada em nonce/hash), começando por `default-src 'self'` e liberando origens sob demanda. Use o modo `Content-Security-Policy-Report-Only` para calibrar sem quebrar o site.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/Content-Security-Policy",
+        "https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html"
+      ]
+    },
+    {
+      "id": "CLICKJACKING_SEM_PROTECAO",
+      "titulo": "Sem proteção contra clickjacking",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Média",
+      "severidade_nivel": 2,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-1021",
+      "descricao": "Não há `X-Frame-Options` nem a diretiva `frame-ancestors` na CSP.",
+      "evidencia": null,
+      "impacto": "A página pode ser embutida em um <iframe> de um site malicioso (clickjacking), induzindo o usuário a clicar em ações sem perceber.",
+      "recomendacao": "Defina `Content-Security-Policy: frame-ancestors 'none'` (ou `'self'`) — abordagem moderna — e/ou `X-Frame-Options: DENY`.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Frame-Options",
+        "https://owasp.org/www-project-secure-headers/"
+      ]
+    },
+    {
+      "id": "DMARC_AUSENTE",
+      "titulo": "Registro DMARC ausente",
+      "categoria": "DNS / E-mail",
+      "severidade": "Média",
+      "severidade_nivel": 2,
+      "owasp": "A07:2025 Authentication Failures",
+      "cwe": "CWE-290",
+      "descricao": "O domínio `github.io` não publica uma política DMARC.",
+      "evidencia": null,
+      "impacto": "Sem DMARC, mesmo com SPF/DKIM os provedores não sabem o que fazer com e-mails que falham na autenticação, deixando brecha para spoofing.",
+      "recomendacao": "Publique um registro em `_dmarc.<domínio>` começando por monitoramento (`v=DMARC1; p=none; rua=mailto:...`) e evolua para `p=quarantine` e `p=reject`.",
+      "referencias": [
+        "https://www.rfc-editor.org/rfc/rfc7489",
+        "https://dmarc.org/overview/"
+      ]
+    },
+    {
+      "id": "REFERRER_POLICY_AUSENTE",
+      "titulo": "Referrer-Policy ausente",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Baixa",
+      "severidade_nivel": 1,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-200",
+      "descricao": "O cabeçalho `Referrer-Policy` não foi encontrado na resposta.",
+      "evidencia": null,
+      "impacto": "Sem política de referenciador, URLs internas (com tokens, IDs ou dados sensíveis no path/query) podem vazar para sites de terceiros no cabeçalho Referer.",
+      "recomendacao": "Defina `Referrer-Policy: strict-origin-when-cross-origin` (ou `no-referrer` para o máximo de privacidade).",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/Referrer-Policy",
+        "https://owasp.org/www-project-secure-headers/"
+      ]
+    },
+    {
+      "id": "XCTO_AUSENTE",
+      "titulo": "X-Content-Type-Options ausente",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Baixa",
+      "severidade_nivel": 1,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-693",
+      "descricao": "O cabeçalho `X-Content-Type-Options` não foi encontrado na resposta.",
+      "evidencia": null,
+      "impacto": "Sem 'nosniff', o navegador pode tentar adivinhar (MIME sniffing) o tipo de conteúdo e interpretar um arquivo como script, abrindo espaço para XSS a partir de uploads ou respostas mal tipadas.",
+      "recomendacao": "Envie o cabeçalho `X-Content-Type-Options: nosniff` em todas as respostas.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Content-Type-Options",
+        "https://owasp.org/www-project-secure-headers/"
+      ]
+    },
+    {
+      "id": "COOP_AUSENTE",
+      "titulo": "Cross-Origin-Opener-Policy ausente",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Informativa",
+      "severidade_nivel": 0,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-693",
+      "descricao": "O cabeçalho `Cross-Origin-Opener-Policy` não foi encontrado na resposta.",
+      "evidencia": null,
+      "impacto": "Sem COOP, a página compartilha o mesmo grupo de contexto de navegação com janelas de outras origens, facilitando ataques de canal lateral cross-origin (ex.: Spectre) e manipulação via window.opener.",
+      "recomendacao": "Defina `Cross-Origin-Opener-Policy: same-origin` em páginas sensíveis.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy",
+        "https://owasp.org/www-project-secure-headers/"
+      ]
+    },
+    {
+      "id": "HSTS_SEM_SUBDOMINIOS",
+      "titulo": "HSTS sem includeSubDomains",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Informativa",
+      "severidade_nivel": 0,
+      "owasp": "A04:2025 Cryptographic Failures",
+      "cwe": "CWE-319",
+      "descricao": "O HSTS não cobre os subdomínios.",
+      "evidencia": "Strict-Transport-Security: max-age=31556952",
+      "impacto": "Subdomínios sem HSTS podem ser usados para ataques de rebaixamento e para plantar/ler cookies do domínio pai.",
+      "recomendacao": "Adicione a diretiva `includeSubDomains` após validar todos os subdomínios em HTTPS.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/Strict-Transport-Security"
+      ]
+    },
+    {
+      "id": "PERMISSIONS_POLICY_AUSENTE",
+      "titulo": "Permissions-Policy ausente",
+      "categoria": "Cabeçalhos de Segurança",
+      "severidade": "Informativa",
+      "severidade_nivel": 0,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-693",
+      "descricao": "O cabeçalho `Permissions-Policy` não foi encontrado na resposta.",
+      "evidencia": null,
+      "impacto": "Sem essa política, a página não restringe explicitamente recursos poderosos do navegador (câmera, microfone, geolocalização, etc.), ampliando o impacto de um eventual XSS.",
+      "recomendacao": "Defina uma `Permissions-Policy` restritiva, desabilitando recursos não usados, ex.: `Permissions-Policy: camera=(), microphone=(), geolocation=()`.",
+      "referencias": [
+        "https://developer.mozilla.org/docs/Web/HTTP/Headers/Permissions-Policy",
+        "https://owasp.org/www-project-secure-headers/"
+      ]
+    },
+    {
+      "id": "DNSSEC_AUSENTE",
+      "titulo": "DNSSEC não detectado",
+      "categoria": "DNS / E-mail",
+      "severidade": "Informativa",
+      "severidade_nivel": 0,
+      "owasp": "A02:2025 Security Misconfiguration",
+      "cwe": "CWE-345",
+      "descricao": "Não foram encontrados registros DNSKEY para `github.io` (zona provavelmente não assinada).",
+      "evidencia": null,
+      "impacto": "Sem DNSSEC, respostas DNS podem ser forjadas (cache poisoning), redirecionando usuários para servidores maliciosos.",
+      "recomendacao": "Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.",
+      "referencias": [
+        "https://www.rfc-editor.org/rfc/rfc8659"
+      ]
+    }
+  ],
+  "erros": []
+}

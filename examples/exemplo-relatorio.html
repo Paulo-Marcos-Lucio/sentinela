@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Diagnóstico de Segurança — paulo-marcos-lucio.github.io</title>
+<style>
+  :root {
+    --ink: #0f172a; --muted: #475569; --faint: #94a3b8;
+    --line: #e2e8f0; --bg: #f8fafc; --card: #ffffff;
+    --brand: #0f766e; --brand-soft: #ccfbf1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; font-size: 15px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+  header.report {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding-bottom: 20px; border-bottom: 2px solid var(--brand); margin-bottom: 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--brand); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-family: ui-monospace, monospace;
+  }
+  .brand h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+  .meta { text-align: right; font-size: 12px; color: var(--muted); }
+  .meta code { color: var(--ink); }
+
+  .summary { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; margin-bottom: 24px; }
+  .grade {
+    width: 118px; height: 118px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  }
+  .grade .letter { font-size: 46px; font-weight: 800; line-height: 1; }
+  .grade .num { font-size: 13px; opacity: 0.92; }
+  .summary h2 { margin: 0 0 6px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .summary p.lead { margin: 0 0 14px; font-size: 16px; }
+
+  .dist { display: flex; height: 10px; border-radius: 6px; overflow: hidden; margin-bottom: 12px; background: var(--line); }
+  .dist span { display: block; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 32px; padding: 16px 20px;
+    background: var(--brand-soft); border-radius: 12px; font-size: 13px; }
+  .facts b { color: var(--ink); }
+  .facts .k { color: var(--brand); font-weight: 700; }
+
+  h3.cat { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+    margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+
+  .finding { background: var(--card); border: 1px solid var(--line); border-left-width: 5px;
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .finding .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .sev { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #fff; padding: 3px 9px; border-radius: 6px; }
+  .finding h4 { margin: 0; font-size: 16px; flex: 1; min-width: 200px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .finding .desc { margin: 0 0 12px; }
+  .kv { margin: 8px 0; font-size: 14px; }
+  .kv b { color: var(--muted); font-weight: 700; display: inline-block; min-width: 108px; vertical-align: top; }
+  .kv code, .evidence code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 5px; font-size: 13px; word-break: break-word; }
+  .refs a { color: var(--brand); font-size: 13px; margin-right: 10px; text-decoration: none; }
+  .refs a:hover { text-decoration: underline; }
+
+  footer.report { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted); }
+  footer.report h4 { color: var(--ink); font-size: 13px; margin: 0 0 8px; }
+  .empty { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; text-align: center; }
+
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .wrap { max-width: none; padding: 0; }
+    .finding, .summary { box-shadow: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="report">
+    <div class="brand">
+      <div class="mark">S</div>
+      <div>
+        <h1>Diagnóstico de Segurança</h1>
+        <p>Relatório gerado pela Sentinela v0.1.0</p>
+      </div>
+    </div>
+    <div class="meta">
+      <div>Alvo: <code>https://paulo-marcos-lucio.github.io/</code></div>
+      <div>21/07/2026 15:14 UTC</div>
+      <div>Modo: Não-intrusivo · 8 checagens</div>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="grade" style="background: #d29922;">
+      <div>
+        <div class="letter">C</div>
+        <div class="num">70/100</div>
+      </div>
+    </div>
+    <div>
+      <h2>Sumário executivo</h2>
+      <p class="lead">Sem achados críticos ou altos; há oportunidades de endurecimento (hardening) de severidade média/baixa.</p>
+      <div class="dist">
+        <span style="flex: 3; background: #d29922;" title="Média: 3"></span><span style="flex: 2; background: #58a6ff;" title="Baixa: 2"></span><span style="flex: 4; background: #8b949e;" title="Informativa: 4"></span>
+      </div>
+      <div class="chips">
+        
+        <span class="chip"><span class="dot" style="background: #f85149;"></span>Crítica: 0</span>
+        
+        <span class="chip"><span class="dot" style="background: #ff7b72;"></span>Alta: 0</span>
+        
+        <span class="chip"><span class="dot" style="background: #d29922;"></span>Média: 3</span>
+        
+        <span class="chip"><span class="dot" style="background: #58a6ff;"></span>Baixa: 2</span>
+        
+        <span class="chip"><span class="dot" style="background: #8b949e;"></span>Informativa: 4</span>
+        
+      </div>
+    </div>
+  </section>
+
+  <div class="facts">
+    <div><span class="k">Total de achados</span> <b>9</b></div>
+    <div><span class="k">Nota de higiene</span> <b>70/100 · C</b></div>
+    <div><span class="k">Modo</span> <b>Não-intrusivo</b></div>
+    <div><span class="k">Taxonomia</span> <b>OWASP Top 10:2025 + CWE</b></div>
+  </div>
+
+  
+    
+    <h3 class="cat">Cabeçalhos de Segurança</h3>
+    
+    <article class="finding" style="border-left-color: #d29922;">
+      <div class="top">
+        <span class="sev" style="background: #d29922;">Média</span>
+        <h4>Content-Security-Policy ausente</h4>
+        <div class="tags">
+          <span class="tag">CSP_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-693</span>
+        </div>
+      </div>
+      <p class="desc">A resposta não define uma Content-Security-Policy.</p>
+      
+      <div class="kv"><b>Impacto</b> A CSP é a defesa em profundidade mais eficaz contra XSS e injeção de conteúdo. Sem ela, qualquer falha de saída não escapada vira execução de script no navegador da vítima.</div>
+      <div class="kv"><b>Recomendação</b> Implante uma CSP restritiva (idealmente baseada em nonce/hash), começando por `default-src &#39;self&#39;` e liberando origens sob demanda. Use o modo `Content-Security-Policy-Report-Only` para calibrar sem quebrar o site.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Content-Security-Policy">developer.mozilla.org ↗</a><a href="https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html">cheatsheetseries.owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #d29922;">
+      <div class="top">
+        <span class="sev" style="background: #d29922;">Média</span>
+        <h4>Sem proteção contra clickjacking</h4>
+        <div class="tags">
+          <span class="tag">CLICKJACKING_SEM_PROTECAO</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-1021</span>
+        </div>
+      </div>
+      <p class="desc">Não há `X-Frame-Options` nem a diretiva `frame-ancestors` na CSP.</p>
+      
+      <div class="kv"><b>Impacto</b> A página pode ser embutida em um &lt;iframe&gt; de um site malicioso (clickjacking), induzindo o usuário a clicar em ações sem perceber.</div>
+      <div class="kv"><b>Recomendação</b> Defina `Content-Security-Policy: frame-ancestors &#39;none&#39;` (ou `&#39;self&#39;`) — abordagem moderna — e/ou `X-Frame-Options: DENY`.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Frame-Options">developer.mozilla.org ↗</a><a href="https://owasp.org/www-project-secure-headers/">owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #58a6ff;">
+      <div class="top">
+        <span class="sev" style="background: #58a6ff;">Baixa</span>
+        <h4>Referrer-Policy ausente</h4>
+        <div class="tags">
+          <span class="tag">REFERRER_POLICY_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-200</span>
+        </div>
+      </div>
+      <p class="desc">O cabeçalho `Referrer-Policy` não foi encontrado na resposta.</p>
+      
+      <div class="kv"><b>Impacto</b> Sem política de referenciador, URLs internas (com tokens, IDs ou dados sensíveis no path/query) podem vazar para sites de terceiros no cabeçalho Referer.</div>
+      <div class="kv"><b>Recomendação</b> Defina `Referrer-Policy: strict-origin-when-cross-origin` (ou `no-referrer` para o máximo de privacidade).</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Referrer-Policy">developer.mozilla.org ↗</a><a href="https://owasp.org/www-project-secure-headers/">owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #58a6ff;">
+      <div class="top">
+        <span class="sev" style="background: #58a6ff;">Baixa</span>
+        <h4>X-Content-Type-Options ausente</h4>
+        <div class="tags">
+          <span class="tag">XCTO_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-693</span>
+        </div>
+      </div>
+      <p class="desc">O cabeçalho `X-Content-Type-Options` não foi encontrado na resposta.</p>
+      
+      <div class="kv"><b>Impacto</b> Sem &#39;nosniff&#39;, o navegador pode tentar adivinhar (MIME sniffing) o tipo de conteúdo e interpretar um arquivo como script, abrindo espaço para XSS a partir de uploads ou respostas mal tipadas.</div>
+      <div class="kv"><b>Recomendação</b> Envie o cabeçalho `X-Content-Type-Options: nosniff` em todas as respostas.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Content-Type-Options">developer.mozilla.org ↗</a><a href="https://owasp.org/www-project-secure-headers/">owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #8b949e;">
+      <div class="top">
+        <span class="sev" style="background: #8b949e;">Informativa</span>
+        <h4>Cross-Origin-Opener-Policy ausente</h4>
+        <div class="tags">
+          <span class="tag">COOP_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-693</span>
+        </div>
+      </div>
+      <p class="desc">O cabeçalho `Cross-Origin-Opener-Policy` não foi encontrado na resposta.</p>
+      
+      <div class="kv"><b>Impacto</b> Sem COOP, a página compartilha o mesmo grupo de contexto de navegação com janelas de outras origens, facilitando ataques de canal lateral cross-origin (ex.: Spectre) e manipulação via window.opener.</div>
+      <div class="kv"><b>Recomendação</b> Defina `Cross-Origin-Opener-Policy: same-origin` em páginas sensíveis.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy">developer.mozilla.org ↗</a><a href="https://owasp.org/www-project-secure-headers/">owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #8b949e;">
+      <div class="top">
+        <span class="sev" style="background: #8b949e;">Informativa</span>
+        <h4>HSTS sem includeSubDomains</h4>
+        <div class="tags">
+          <span class="tag">HSTS_SEM_SUBDOMINIOS</span>
+          <span class="tag">A04:2025 Cryptographic Failures</span>
+          <span class="tag">CWE-319</span>
+        </div>
+      </div>
+      <p class="desc">O HSTS não cobre os subdomínios.</p>
+      <div class="kv evidence"><b>Evidência</b> <code>Strict-Transport-Security: max-age=31556952</code></div>
+      <div class="kv"><b>Impacto</b> Subdomínios sem HSTS podem ser usados para ataques de rebaixamento e para plantar/ler cookies do domínio pai.</div>
+      <div class="kv"><b>Recomendação</b> Adicione a diretiva `includeSubDomains` após validar todos os subdomínios em HTTPS.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Strict-Transport-Security">developer.mozilla.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #8b949e;">
+      <div class="top">
+        <span class="sev" style="background: #8b949e;">Informativa</span>
+        <h4>Permissions-Policy ausente</h4>
+        <div class="tags">
+          <span class="tag">PERMISSIONS_POLICY_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-693</span>
+        </div>
+      </div>
+      <p class="desc">O cabeçalho `Permissions-Policy` não foi encontrado na resposta.</p>
+      
+      <div class="kv"><b>Impacto</b> Sem essa política, a página não restringe explicitamente recursos poderosos do navegador (câmera, microfone, geolocalização, etc.), ampliando o impacto de um eventual XSS.</div>
+      <div class="kv"><b>Recomendação</b> Defina uma `Permissions-Policy` restritiva, desabilitando recursos não usados, ex.: `Permissions-Policy: camera=(), microphone=(), geolocation=()`.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://developer.mozilla.org/docs/Web/HTTP/Headers/Permissions-Policy">developer.mozilla.org ↗</a><a href="https://owasp.org/www-project-secure-headers/">owasp.org ↗</a>
+      </div>
+      
+    </article>
+    
+    
+    <h3 class="cat">DNS / E-mail</h3>
+    
+    <article class="finding" style="border-left-color: #d29922;">
+      <div class="top">
+        <span class="sev" style="background: #d29922;">Média</span>
+        <h4>Registro DMARC ausente</h4>
+        <div class="tags">
+          <span class="tag">DMARC_AUSENTE</span>
+          <span class="tag">A07:2025 Authentication Failures</span>
+          <span class="tag">CWE-290</span>
+        </div>
+      </div>
+      <p class="desc">O domínio `github.io` não publica uma política DMARC.</p>
+      
+      <div class="kv"><b>Impacto</b> Sem DMARC, mesmo com SPF/DKIM os provedores não sabem o que fazer com e-mails que falham na autenticação, deixando brecha para spoofing.</div>
+      <div class="kv"><b>Recomendação</b> Publique um registro em `_dmarc.&lt;domínio&gt;` começando por monitoramento (`v=DMARC1; p=none; rua=mailto:...`) e evolua para `p=quarantine` e `p=reject`.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://www.rfc-editor.org/rfc/rfc7489">www.rfc-editor.org ↗</a><a href="https://dmarc.org/overview/">dmarc.org ↗</a>
+      </div>
+      
+    </article>
+    
+    <article class="finding" style="border-left-color: #8b949e;">
+      <div class="top">
+        <span class="sev" style="background: #8b949e;">Informativa</span>
+        <h4>DNSSEC não detectado</h4>
+        <div class="tags">
+          <span class="tag">DNSSEC_AUSENTE</span>
+          <span class="tag">A02:2025 Security Misconfiguration</span>
+          <span class="tag">CWE-345</span>
+        </div>
+      </div>
+      <p class="desc">Não foram encontrados registros DNSKEY para `github.io` (zona provavelmente não assinada).</p>
+      
+      <div class="kv"><b>Impacto</b> Sem DNSSEC, respostas DNS podem ser forjadas (cache poisoning), redirecionando usuários para servidores maliciosos.</div>
+      <div class="kv"><b>Recomendação</b> Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.</div>
+      
+      <div class="kv refs"><b>Referências</b>
+        <a href="https://www.rfc-editor.org/rfc/rfc8659">www.rfc-editor.org ↗</a>
+      </div>
+      
+    </article>
+    
+    
+  
+
+  
+
+  <footer class="report">
+    <h4>Metodologia e limites</h4>
+    <p>Este relatório resulta de checagens <b>não-intrusivas</b> (salvo modo intrusivo explicitamente
+    autorizado) que observam o que o servidor expõe a um cliente comum. A <b>nota de higiene</b> é um
+    indicador transparente e reprodutível — <b>não</b> um escore CVSS formal. A ausência de achados
+    não garante inexistência de vulnerabilidades: falhas de lógica de negócio, injeção e autorização
+    exigem teste manual dedicado (não coberto por este modo).</p>
+    <p>Conduzido sob autorização e dentro do escopo acordado, em conformidade com a Lei 12.737/2012,
+    a Lei 14.155/2021, o Marco Civil da Internet (Lei 12.965/2014) e a LGPD (Lei 13.709/2018).</p>
+  </footer>
+</div>
+</body>
+</html>
