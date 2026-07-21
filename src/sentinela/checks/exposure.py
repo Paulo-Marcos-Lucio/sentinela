@@ -1,0 +1,177 @@
+"""Sondagem de arquivos e rotas sensíveis expostos (INTRUSIVO — opt-in).
+
+Esta checagem envia requisições GET para caminhos conhecidos por vazarem dados
+(``/.git/HEAD``, ``/.env`` etc.). Embora sejam somente leituras (nunca escreve
+nem apaga nada), constituem tráfego que vai além de "visitar o site". Por isso
+só executa quando o operador declara explicitamente autorização (`--autorizado`).
+
+Cada caminho tem uma **assinatura de conteúdo**: um 200 genérico (comum em SPAs
+com rota catch-all) não gera achado — só dispara quando o corpo realmente casa
+com o padrão do artefato sensível. Isso derruba os falsos-positivos.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
+from urllib.parse import urljoin
+
+from sentinela.checks.base import Checker
+from sentinela.core.context import ScanContext
+from sentinela.core.models import Category, Finding, Severity
+from sentinela.knowledge import references as ref
+
+_GIT_HEAD_RE = re.compile(r"^(ref:\s+refs/|[0-9a-f]{40})", re.IGNORECASE)
+_ENV_RE = re.compile(r"^[A-Z0-9_]+\s*=", re.MULTILINE)
+
+
+def _is_git_head(body: str) -> bool:
+    return bool(_GIT_HEAD_RE.match(body.strip()))
+
+
+def _is_dotenv(body: str) -> bool:
+    lowered = body.lower()
+    if "<html" in lowered or "<!doctype" in lowered:
+        return False
+    return bool(_ENV_RE.search(body))
+
+
+def _contains(needle: str) -> Callable[[str], bool]:
+    return lambda body: needle.lower() in body.lower()
+
+
+@dataclass(frozen=True, slots=True)
+class _Path:
+    path: str
+    finding_id: str
+    title: str
+    severity: Severity
+    signature: Callable[[str], bool]
+    impact: str
+    recommendation: str
+    references: tuple[str, ...]
+
+
+_PATHS: tuple[_Path, ...] = (
+    _Path(
+        path="/.git/HEAD",
+        finding_id="GIT_EXPOSTO",
+        title="Repositório .git exposto",
+        severity=Severity.CRITICAL,
+        signature=_is_git_head,
+        impact=(
+            "Um diretório .git acessível permite baixar todo o histórico do "
+            "código-fonte — incluindo segredos, credenciais e lógica de negócio "
+            "que deveriam ser privados."
+        ),
+        recommendation=(
+            "Bloqueie o acesso a `/.git` no servidor web e nunca faça deploy do "
+            "diretório de controle de versão para produção."
+        ),
+        references=(ref.OWASP_TOP10,),
+    ),
+    _Path(
+        path="/.env",
+        finding_id="DOTENV_EXPOSTO",
+        title="Arquivo .env exposto",
+        severity=Severity.CRITICAL,
+        signature=_is_dotenv,
+        impact=(
+            "Arquivos .env costumam guardar credenciais de banco, chaves de API e "
+            "segredos de aplicação. Exposição equivale a vazamento direto de segredos."
+        ),
+        recommendation=(
+            "Remova o arquivo da raiz pública, bloqueie o acesso e **rotacione "
+            "imediatamente** qualquer segredo que possa ter sido exposto."
+        ),
+        references=(ref.OWASP_TOP10,),
+    ),
+    _Path(
+        path="/.svn/entries",
+        finding_id="SVN_EXPOSTO",
+        title="Metadados Subversion (.svn) expostos",
+        severity=Severity.HIGH,
+        signature=_contains("dir"),
+        impact="Metadados de controle de versão podem revelar estrutura e fontes da aplicação.",
+        recommendation="Bloqueie o acesso a `/.svn` e não publique diretórios de VCS.",
+        references=(ref.OWASP_TOP10,),
+    ),
+    _Path(
+        path="/server-status",
+        finding_id="APACHE_STATUS_EXPOSTO",
+        title="Apache mod_status exposto",
+        severity=Severity.MEDIUM,
+        signature=_contains("Apache Server Status"),
+        impact=(
+            "A página de status do Apache revela requisições em andamento, IPs de "
+            "clientes, URLs acessadas e métricas internas do servidor."
+        ),
+        recommendation="Restrinja `/server-status` a redes internas ou desabilite o mod_status.",
+        references=(ref.OWASP_TOP10,),
+    ),
+    _Path(
+        path="/phpinfo.php",
+        finding_id="PHPINFO_EXPOSTO",
+        title="phpinfo() exposto",
+        severity=Severity.HIGH,
+        signature=_contains("phpinfo()"),
+        impact=(
+            "A saída de phpinfo() detalha versão do PHP, módulos, caminhos absolutos "
+            "e variáveis de ambiente — um mapa completo para o atacante."
+        ),
+        recommendation="Remova arquivos phpinfo() de ambientes acessíveis publicamente.",
+        references=(ref.OWASP_TOP10,),
+    ),
+)
+
+
+class ExposureChecker(Checker):
+    id = "exposure"
+    name = "Arquivos e rotas sensíveis (intrusivo)"
+    category = Category.EXPOSURE
+    intrusive = True
+
+    def run(self, ctx: ScanContext) -> Iterable[Finding]:
+        base = ctx.target.origin + "/"
+        for spec in _PATHS:
+            url = urljoin(base, spec.path.lstrip("/"))
+            probe = ctx.client.get(url)
+            if not probe.ok or probe.status_code != 200:
+                continue
+            if spec.signature(probe.body_snippet):
+                yield Finding(
+                    id=spec.finding_id,
+                    title=spec.title,
+                    category=self.category,
+                    severity=spec.severity,
+                    description=f"O caminho `{spec.path}` respondeu 200 com conteúdo sensível.",
+                    evidence=f"GET {url} → 200",
+                    impact=spec.impact,
+                    recommendation=spec.recommendation,
+                    references=spec.references,
+                )
+
+        yield from self._check_security_txt(ctx)
+
+    def _check_security_txt(self, ctx: ScanContext) -> Iterable[Finding]:
+        url = urljoin(ctx.target.origin + "/", ".well-known/security.txt")
+        probe = ctx.client.get(url)
+        presente = probe.ok and probe.status_code == 200 and "contact" in probe.body_snippet.lower()
+        if not presente:
+            yield Finding(
+                id="SECURITY_TXT_AUSENTE",
+                title="security.txt ausente",
+                category=self.category,
+                severity=Severity.INFO,
+                description="Não há `/.well-known/security.txt` publicado.",
+                impact=(
+                    "Sem um canal padronizado de contato de segurança, pesquisadores "
+                    "não sabem para onde reportar vulnerabilidades de forma responsável."
+                ),
+                recommendation=(
+                    "Publique um `/.well-known/security.txt` (RFC 9116) com um contato "
+                    "de segurança e a política de divulgação."
+                ),
+                references=(ref.RFC_SECURITY_TXT,),
+            )
