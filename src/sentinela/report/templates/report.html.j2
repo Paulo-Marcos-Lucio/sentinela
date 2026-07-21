@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Diagnóstico de Segurança — {{ target.host }}</title>
+<style>
+  :root {
+    --ink: #0f172a; --muted: #475569; --faint: #94a3b8;
+    --line: #e2e8f0; --bg: #f8fafc; --card: #ffffff;
+    --brand: #0f766e; --brand-soft: #ccfbf1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6; font-size: 15px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+  header.report {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 16px; padding-bottom: 20px; border-bottom: 2px solid var(--brand); margin-bottom: 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand .mark {
+    width: 40px; height: 40px; border-radius: 10px; background: var(--brand); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-family: ui-monospace, monospace;
+  }
+  .brand h1 { font-size: 18px; margin: 0; letter-spacing: -0.01em; }
+  .brand p { margin: 0; font-size: 12px; color: var(--muted); }
+  .meta { text-align: right; font-size: 12px; color: var(--muted); }
+  .meta code { color: var(--ink); }
+
+  .summary { display: grid; grid-template-columns: auto 1fr; gap: 28px; align-items: center;
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 28px; margin-bottom: 24px; }
+  .grade {
+    width: 118px; height: 118px; border-radius: 50%; display: grid; place-items: center;
+    color: #fff; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  }
+  .grade .letter { font-size: 46px; font-weight: 800; line-height: 1; }
+  .grade .num { font-size: 13px; opacity: 0.92; }
+  .summary h2 { margin: 0 0 6px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .summary p.lead { margin: 0 0 14px; font-size: 16px; }
+
+  .dist { display: flex; height: 10px; border-radius: 6px; overflow: hidden; margin-bottom: 12px; background: var(--line); }
+  .dist span { display: block; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
+  .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 32px; padding: 16px 20px;
+    background: var(--brand-soft); border-radius: 12px; font-size: 13px; }
+  .facts b { color: var(--ink); }
+  .facts .k { color: var(--brand); font-weight: 700; }
+
+  h3.cat { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
+    margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+
+  .finding { background: var(--card); border: 1px solid var(--line); border-left-width: 5px;
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 14px; }
+  .finding .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .sev { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #fff; padding: 3px 9px; border-radius: 6px; }
+  .finding h4 { margin: 0; font-size: 16px; flex: 1; min-width: 200px; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; font-weight: 600; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
+  .finding .desc { margin: 0 0 12px; }
+  .kv { margin: 8px 0; font-size: 14px; }
+  .kv b { color: var(--muted); font-weight: 700; display: inline-block; min-width: 108px; vertical-align: top; }
+  .kv code, .evidence code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 1px 5px; font-size: 13px; word-break: break-word; }
+  .refs a { color: var(--brand); font-size: 13px; margin-right: 10px; text-decoration: none; }
+  .refs a:hover { text-decoration: underline; }
+
+  footer.report { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--muted); }
+  footer.report h4 { color: var(--ink); font-size: 13px; margin: 0 0 8px; }
+  .empty { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 28px; text-align: center; }
+
+  @media print {
+    body { background: #fff; font-size: 12px; }
+    .wrap { max-width: none; padding: 0; }
+    .finding, .summary { box-shadow: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="report">
+    <div class="brand">
+      <div class="mark">S</div>
+      <div>
+        <h1>Diagnóstico de Segurança</h1>
+        <p>Relatório gerado pela Sentinela v{{ tool_version }}</p>
+      </div>
+    </div>
+    <div class="meta">
+      <div>Alvo: <code>{{ target.url }}</code></div>
+      <div>{{ generated_at }}</div>
+      <div>Modo: {{ mode }} · {{ checks_run }} checagens</div>
+    </div>
+  </header>
+
+  <section class="summary">
+    <div class="grade" style="background: {{ score.color }};">
+      <div>
+        <div class="letter">{{ score.grade }}</div>
+        <div class="num">{{ score.value }}/100</div>
+      </div>
+    </div>
+    <div>
+      <h2>Sumário executivo</h2>
+      <p class="lead">{{ score.summary }}</p>
+      <div class="dist">
+        {% for c in counts %}{% if c.qtd > 0 %}<span style="flex: {{ c.qtd }}; background: {{ c.color }};" title="{{ c.label }}: {{ c.qtd }}"></span>{% endif %}{% endfor %}
+      </div>
+      <div class="chips">
+        {% for c in counts %}
+        <span class="chip"><span class="dot" style="background: {{ c.color }};"></span>{{ c.label }}: {{ c.qtd }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="facts">
+    <div><span class="k">Total de achados</span> <b>{{ total }}</b></div>
+    <div><span class="k">Nota de higiene</span> <b>{{ score.value }}/100 · {{ score.grade }}</b></div>
+    <div><span class="k">Modo</span> <b>{{ mode }}</b></div>
+    <div><span class="k">Taxonomia</span> <b>OWASP Top 10:2025 + CWE</b></div>
+  </div>
+
+  {% if groups %}
+    {% for group in groups %}
+    <h3 class="cat">{{ group.category }}</h3>
+    {% for f in group.findings %}
+    <article class="finding" style="border-left-color: {{ f.severity_color }};">
+      <div class="top">
+        <span class="sev" style="background: {{ f.severity_color }};">{{ f.severity }}</span>
+        <h4>{{ f.title }}</h4>
+        <div class="tags">
+          <span class="tag">{{ f.id }}</span>
+          {% if f.owasp %}<span class="tag">{{ f.owasp }}</span>{% endif %}
+          {% if f.cwe %}<span class="tag">{{ f.cwe }}</span>{% endif %}
+        </div>
+      </div>
+      <p class="desc">{{ f.description }}</p>
+      {% if f.evidence %}<div class="kv evidence"><b>Evidência</b> <code>{{ f.evidence }}</code></div>{% endif %}
+      {% if f.impact %}<div class="kv"><b>Impacto</b> {{ f.impact }}</div>{% endif %}
+      <div class="kv"><b>Recomendação</b> {{ f.recommendation }}</div>
+      {% if f.references %}
+      <div class="kv refs"><b>Referências</b>
+        {% for url in f.references %}<a href="{{ url }}">{{ url.split('//')[-1].split('/')[0] }} ↗</a>{% endfor %}
+      </div>
+      {% endif %}
+    </article>
+    {% endfor %}
+    {% endfor %}
+  {% else %}
+    <div class="empty">✅ Nenhum achado registrado pelas checagens executadas.</div>
+  {% endif %}
+
+  {% if errors %}
+  <h3 class="cat">Observações de execução</h3>
+  <ul>
+    {% for e in errors %}<li><code>{{ e.check }}</code>: {{ e.message }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+
+  <footer class="report">
+    <h4>Metodologia e limites</h4>
+    <p>Este relatório resulta de checagens <b>não-intrusivas</b> (salvo modo intrusivo explicitamente
+    autorizado) que observam o que o servidor expõe a um cliente comum. A <b>nota de higiene</b> é um
+    indicador transparente e reprodutível — <b>não</b> um escore CVSS formal. A ausência de achados
+    não garante inexistência de vulnerabilidades: falhas de lógica de negócio, injeção e autorização
+    exigem teste manual dedicado (não coberto por este modo).</p>
+    <p>Conduzido sob autorização e dentro do escopo acordado, em conformidade com a Lei 12.737/2012,
+    a Lei 14.155/2021, o Marco Civil da Internet (Lei 12.965/2014) e a LGPD (Lei 13.709/2018).</p>
+  </footer>
+</div>
+</body>
+</html>
