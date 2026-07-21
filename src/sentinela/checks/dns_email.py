@@ -8,6 +8,7 @@ corretamente domínios como ``empresa.com.br``.
 from __future__ import annotations
 
 import ipaddress
+import re
 from collections.abc import Iterable
 
 import dns.exception
@@ -99,12 +100,10 @@ class DnsEmailChecker(Checker):
 
         record = spf[0]
         lowered = record.lower()
-        if (
-            "+all" in lowered
-            or lowered.rstrip().endswith("all")
-            and "-all" not in lowered
-            and "~all" not in lowered
-        ):
+        # Permissivo = não termina de forma restritiva. Sem `-all` (hardfail) nem
+        # `~all` (softfail), a ausência de mecanismo `all` equivale ao default
+        # neutro `?all` (RFC 7208), que autoriza qualquer remetente.
+        if "-all" not in lowered and "~all" not in lowered:
             yield Finding(
                 id="SPF_PERMISSIVO",
                 title="Registro SPF permissivo",
@@ -141,7 +140,11 @@ class DnsEmailChecker(Checker):
             return
 
         record = records[0]
-        if "p=none" in record.lower().replace(" ", ""):
+        # Extrai o valor exato do tag `p=` (a política principal). Substring ingênua
+        # casaria `p=none` dentro de `sp=none` (política de subdomínio) — falso-positivo.
+        policy_match = re.search(r"(?:^|;)\s*p\s*=\s*(\w+)", record, re.IGNORECASE)
+        policy = policy_match.group(1).lower() if policy_match else ""
+        if policy == "none":
             yield Finding(
                 id="DMARC_SEM_ENFORCEMENT",
                 title="DMARC apenas em modo monitoramento",
@@ -198,7 +201,7 @@ class DnsEmailChecker(Checker):
                 "redirecionando usuários para servidores maliciosos."
             ),
             recommendation="Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.",
-            references=(ref.RFC_CAA,),
+            references=(ref.RFC_DNSSEC,),
         )
 
 

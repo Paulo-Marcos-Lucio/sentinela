@@ -12,7 +12,7 @@ repos:
     hooks:
       - id: mypy
         files: ^src/
-        additional_dependencies: [types-requests]
+        additional_dependencies: [typer, httpx, jinja2, rich, cryptography, dnspython, tldextract]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

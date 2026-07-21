@@ -145,12 +145,18 @@ class Target:
         return self.scheme == "https"
 
     @property
+    def host_for_url(self) -> str:
+        """Host pronto para compor uma URL (IPv6 literal entre colchetes)."""
+        return f"[{self.host}]" if ":" in self.host else self.host
+
+    @property
     def origin(self) -> str:
         """Origem no formato ``scheme://host[:porta]`` (porta omitida se padrão)."""
         default = {"http": 80, "https": 443}.get(self.scheme)
+        host = self.host_for_url
         if self.port == default:
-            return f"{self.scheme}://{self.host}"
-        return f"{self.scheme}://{self.host}:{self.port}"
+            return f"{self.scheme}://{host}"
+        return f"{self.scheme}://{host}:{self.port}"
 
 
 @dataclass(frozen=True, slots=True)

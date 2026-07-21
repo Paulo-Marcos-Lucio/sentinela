@@ -93,7 +93,8 @@ def scan(
     sem_verificacao_tls: Annotated[
         bool,
         typer.Option(
-            "--sem-verificacao-tls", help="Não interrompe em erro de certificado (ainda reporta)."
+            "--sem-verificacao-tls",
+            help="INSEGURO: desabilita a validação de certificado TLS em todas as conexões (sujeito a MITM). Os achados de TLS ainda são reportados.",
         ),
     ] = False,
     pular: Annotated[

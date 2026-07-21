@@ -1,6 +1,6 @@
 # Relatório de Diagnóstico de Segurança — paulo-marcos-lucio.github.io
 
-> Gerado pela **Sentinela v0.1.0** · 21/07/2026 15:14 UTC
+> Gerado pela **Sentinela v0.1.0** · 21/07/2026 15:40 UTC
 
 | Item | Valor |
 | --- | --- |
@@ -116,7 +116,7 @@ Não foram encontrados registros DNSKEY para `github.io` (zona provavelmente nã
 
 - **Impacto:** Sem DNSSEC, respostas DNS podem ser forjadas (cache poisoning), redirecionando usuários para servidores maliciosos.
 - **Recomendação:** Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.
-- **Referências:** [ref](https://www.rfc-editor.org/rfc/rfc8659)
+- **Referências:** [ref](https://www.rfc-editor.org/rfc/rfc9364)
 
 ---
 

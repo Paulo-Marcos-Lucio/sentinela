@@ -140,6 +140,13 @@ class TlsChecker(Checker):
             ):
                 return
         except ssl.SSLCertVerificationError as exc:
+            code = getattr(exc, "verify_code", None)
+            msg = str(getattr(exc, "verify_message", "") or exc).lower()
+            # Expiração e hostname divergente já têm checagens dedicadas (que inspecionam
+            # o certificado direto). Aqui só reportamos falha de CADEIA de confiança,
+            # para não duplicar o achado nem rotular a causa errada.
+            if code in (9, 10) or "expired" in msg or "hostname mismatch" in msg or "not valid for" in msg:
+                return
             yield Finding(
                 id="CERT_NAO_CONFIAVEL",
                 title="Certificado não confiável",

@@ -48,6 +48,7 @@ RFC_TLS13 = "https://www.rfc-editor.org/rfc/rfc8446"
 RFC_SPF = "https://www.rfc-editor.org/rfc/rfc7208"
 RFC_DMARC = "https://www.rfc-editor.org/rfc/rfc7489"
 RFC_CAA = "https://www.rfc-editor.org/rfc/rfc8659"
+RFC_DNSSEC = "https://www.rfc-editor.org/rfc/rfc9364"
 DMARC_ORG = "https://dmarc.org/overview/"
 
 # Brasil / regulatório

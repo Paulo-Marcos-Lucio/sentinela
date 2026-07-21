@@ -168,7 +168,7 @@ class SecurityHeadersChecker(Checker):
                     "navegador volta a aceitar HTTP na primeira conexão."
                 ),
                 recommendation=(
-                    f"Aumente para pelo menos `max-age={HSTS_ALVO}` (1 ano) e inclua `includeSubDomains`."
+                    f"Aumente para pelo menos `max-age={HSTS_ALVO}` (2 anos) e inclua `includeSubDomains`."
                 ),
                 references=(ref.MDN_HSTS, ref.OWASP_HSTS_CHEATSHEET),
             )

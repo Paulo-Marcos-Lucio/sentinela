@@ -64,6 +64,6 @@ def run_scan(
 
 def _probe_http(client: HttpClient, target: Target) -> Probe | None:
     """Requisita a versão HTTP do host (sem redirecionar) p/ avaliar o upgrade a HTTPS."""
-    url = f"http://{target.host}/"
+    url = f"http://{target.host_for_url}/"
     probe = client.request("GET", url, follow_redirects=False)
     return probe if probe.ok else None

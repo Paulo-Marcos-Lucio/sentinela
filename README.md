@@ -23,7 +23,7 @@ A maioria dos vazamentos e incidentes em PMEs e fintechs **não** começa por um
 
 Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** do atacante — e é o que a **Sentinela** automatiza, transformando uma varredura em um relatório que o time técnico entende e que a diretoria consegue ler.
 
-> **Por que isso é urgente no Brasil?** A LGPD (art. 46) exige medidas técnicas de segurança **e a prova, datada e efetiva, de que elas existem**. A ANPD está em ciclo fiscalizatório e já multou empresas de todos os portes. Um diagnóstico recorrente de vulnerabilidades é uma dessas evidências — e reduz a dosimetria de eventual sanção.
+> **Por que isso é urgente no Brasil?** A LGPD (art. 46) exige medidas técnicas de segurança **e a prova, datada e efetiva, de que elas existem**. A ANPD está em ciclo fiscalizatório e já multou empresas de todos os portes. Um diagnóstico recorrente de vulnerabilidades é uma dessas evidências — e é fator atenuante que a ANPD pondera na dosimetria de eventual sanção.
 
 ---
 
@@ -34,11 +34,11 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 | **Cabeçalhos** | HSTS, CSP, X-Content-Type-Options, X-Frame-Options / clickjacking, Referrer-Policy, Permissions-Policy, COOP, X-XSS-Protection legado | A02 |
 | **TLS / Certificado** | Protocolos legados (TLS 1.0/1.1), certificado expirado/expirando, hostname divergente, chave RSA fraca, assinatura obsoleta, cadeia não confiável | A04 |
 | **Transporte** | Redirecionamento de HTTP → HTTPS | A04 |
-| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` | A04 / A07 |
+| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` | A01 / A04 / A07 |
 | **CORS** | Reflexão de origem, curinga com credenciais, políticas permissivas | A01 |
 | **Métodos HTTP** | `TRACE` (XST), métodos de escrita expostos (`PUT`/`DELETE`) | A02 |
 | **Exposição de info** | Versão de servidor/stack vazada, listagem de diretório | A02 |
-| **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC | A07 / A04 |
+| **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC | A02 / A04 / A07 |
 | **Rotas sensíveis** 🔒 | `.git`, `.env`, `.svn`, `server-status`, `phpinfo`, `security.txt` — **intrusivo, opt-in** | A02 |
 
 Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**, **impacto**, **recomendação prática** e **referências** (OWASP, MDN, RFC), além da classificação **OWASP Top 10:2025 + CWE**.

@@ -77,7 +77,8 @@ _TAGS: dict[str, Tag] = {
     "SPF_PERMISSIVO": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
     "DMARC_AUSENTE": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
     "DMARC_SEM_ENFORCEMENT": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
-    "CAA_AUSENTE": Tag(A04, "CWE-295", "Improper Certificate Validation"),
+    # CAA é hardening de DNS (restringe quais CAs podem emitir); sem CWE canônico bom.
+    "CAA_AUSENTE": Tag(A02, None, None),
     "DNSSEC_AUSENTE": Tag(A02, "CWE-345", "Insufficient Verification of Data Authenticity"),
     # Higiene / processo (sem OWASP direto)
     "SECURITY_TXT_AUSENTE": Tag(None, None, None),

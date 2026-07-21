@@ -37,6 +37,15 @@ def _is_dotenv(body: str) -> bool:
     return bool(_ENV_RE.search(body))
 
 
+def _is_svn_entries(body: str) -> bool:
+    """Formato do `.svn/entries` (v10-): 1ª linha é o número do formato e há
+    uma linha isolada `dir`/`file`. Bem mais específico que a substring 'dir'."""
+    lines = [line.strip() for line in body.strip().splitlines()]
+    if not lines or not lines[0].isdigit():
+        return False
+    return any(line in ("dir", "file") for line in lines)
+
+
 def _contains(needle: str) -> Callable[[str], bool]:
     return lambda body: needle.lower() in body.lower()
 
@@ -92,7 +101,7 @@ _PATHS: tuple[_Path, ...] = (
         finding_id="SVN_EXPOSTO",
         title="Metadados Subversion (.svn) expostos",
         severity=Severity.HIGH,
-        signature=_contains("dir"),
+        signature=_is_svn_entries,
         impact="Metadados de controle de versão podem revelar estrutura e fontes da aplicação.",
         recommendation="Bloqueie o acesso a `/.svn` e não publique diretórios de VCS.",
         references=(ref.OWASP_TOP10,),

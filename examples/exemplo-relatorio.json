@@ -8,9 +8,9 @@
     "esquema": "https"
   },
   "modo": "nao-intrusivo",
-  "iniciado_em": "2026-07-21T15:14:58.651550+00:00",
-  "finalizado_em": "2026-07-21T15:14:59.156652+00:00",
-  "duracao_segundos": 0.51,
+  "iniciado_em": "2026-07-21T15:40:51.608285+00:00",
+  "finalizado_em": "2026-07-21T15:40:52.177188+00:00",
+  "duracao_segundos": 0.57,
   "checagens_executadas": [
     "security-headers",
     "transport",
@@ -182,7 +182,7 @@
       "impacto": "Sem DNSSEC, respostas DNS podem ser forjadas (cache poisoning), redirecionando usuários para servidores maliciosos.",
       "recomendacao": "Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.",
       "referencias": [
-        "https://www.rfc-editor.org/rfc/rfc8659"
+        "https://www.rfc-editor.org/rfc/rfc9364"
       ]
     }
   ],

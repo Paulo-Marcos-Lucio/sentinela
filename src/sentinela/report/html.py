@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-from jinja2 import Environment, select_autoescape
+from jinja2 import Environment
 
 from sentinela.core.models import ScanResult
 from sentinela.knowledge.mapping import tag_for
@@ -42,7 +42,9 @@ def render_html(result: ScanResult) -> str:
             )
         groups.append({"category": categoria.value, "findings": items})
 
-    env = Environment(autoescape=select_autoescape(["html", "xml"]))
+    # autoescape=True explícito: dados controlados pelo alvo (headers, cookies, CORS)
+    # entram no relatório e precisam ser escapados independentemente do nome do template.
+    env = Environment(autoescape=True)
     template = env.from_string(_TEMPLATE)
     return template.render(
         target=result.target,
