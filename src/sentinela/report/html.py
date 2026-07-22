@@ -2,18 +2,29 @@
 
 from __future__ import annotations
 
+import re
 from importlib.resources import files
 
 from jinja2 import Environment
+from markupsafe import Markup, escape
 
 from sentinela.core.models import ScanResult
 from sentinela.knowledge.mapping import tag_for
+from sentinela.knowledge.plain import INTRO_LEIGO, plain_for
 from sentinela.report._shared import (
     grouped_by_category,
     ordered_counts,
     score_of,
     top_priorities,
 )
+
+
+def _emphasize(text: str) -> Markup:
+    """Converte **negrito** em <strong>. Seguro: o texto é ESCAPADO antes e é uma
+    constante da própria ferramenta (INTRO_LEIGO), nunca dado controlado pelo alvo."""
+    escaped = str(escape(text))  # neutraliza qualquer HTML antes de reintroduzir só o <strong>
+    return Markup(re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped))  # noqa: S704
+
 
 _TEMPLATE = files("sentinela.report").joinpath("templates/report.html.j2").read_text("utf-8")
 
@@ -52,6 +63,7 @@ def render_html(result: ScanResult) -> str:
                     "evidence": f.evidence,
                     "impact": f.impact,
                     "recommendation": f.recommendation,
+                    "analogia": plain_for(f.id),
                     "references": list(f.references),
                 }
             )
@@ -70,6 +82,7 @@ def render_html(result: ScanResult) -> str:
         counts=counts,
         total=total,
         priorities=priorities,
+        intro_leigo=_emphasize(INTRO_LEIGO),
         groups=groups,
         checks_run=len(result.checks_run),
         errors=[{"check": e.check_id, "message": e.message} for e in result.errors],

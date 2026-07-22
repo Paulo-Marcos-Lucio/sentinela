@@ -119,3 +119,12 @@ def test_scan_runs_checks_in_parallel_and_completes() -> None:
         on_check=lambda cid, _n: calls.append(cid),
     )
     assert "cookies" in result.checks_run
+
+
+def test_every_finding_has_a_plain_explanation() -> None:
+    # Camada didática (2026-07-22): nenhum achado pode ficar sem "em termos simples".
+    from sentinela.knowledge import mapping
+    from sentinela.knowledge.plain import plain_for
+
+    faltando = [fid for fid in mapping._TAGS if plain_for(fid) is None]
+    assert not faltando, f"achados sem explicação de leigo: {faltando}"

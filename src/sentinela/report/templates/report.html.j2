@@ -67,6 +67,19 @@
   .prio-list .title { font-weight: 700; }
   .prio-fix { color: var(--muted); font-size: 14px; margin-top: 4px; }
 
+  .intro { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: start;
+    background: var(--brand-soft); border-radius: 14px; padding: 20px 24px; margin-bottom: 24px; }
+  .intro .ico { font-size: 26px; line-height: 1.2; }
+  .intro h2 { margin: 0 0 6px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--brand); }
+  .intro p { margin: 0; font-size: 14.5px; color: var(--ink); max-width: 64ch; }
+
+  .plain { position: relative; margin: 0 0 12px; padding: 12px 16px 12px 44px; border-radius: 10px;
+    background: var(--brand-soft); border: 1px solid var(--brand); border-color: color-mix(in srgb, var(--brand) 22%, transparent); }
+  .plain::before { content: "💡"; position: absolute; left: 14px; top: 11px; font-size: 16px; }
+  .plain .lbl { display: block; font-size: 11px; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--brand); margin-bottom: 2px; }
+  .plain p { margin: 0; font-size: 14.5px; color: var(--ink); }
+
   h3.cat { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
     margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
 
@@ -115,6 +128,14 @@
       <div>Modo: {{ mode }} · {{ checks_run }} checagens</div>
     </div>
   </header>
+
+  <div class="intro">
+    <div class="ico">🏬</div>
+    <div>
+      <h2>Como ler este relatório</h2>
+      <p>{{ intro_leigo }}</p>
+    </div>
+  </div>
 
   <section class="summary">
     <div class="grade" style="background: {{ score.color }};">
@@ -176,6 +197,12 @@
         </div>
       </div>
       <p class="desc">{{ f.description }}</p>
+      {% if f.analogia %}
+      <div class="plain">
+        <span class="lbl">Em termos simples</span>
+        <p>{{ f.analogia }}</p>
+      </div>
+      {% endif %}
       {% if f.evidence %}<div class="kv evidence"><b>Evidência</b> <code>{{ f.evidence }}</code></div>{% endif %}
       {% if f.impact %}<div class="kv"><b>Impacto</b> {{ f.impact }}</div>{% endif %}
       <div class="kv"><b>Recomendação</b> {{ f.recommendation }}</div>
