@@ -76,3 +76,40 @@ def test_config_saudavel(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     _patch(monkeypatch, txt, FakeResolver(caa_ok=True, dnskey_ok=True))
     assert _run() == set()
+
+
+# Bateria de campo (2026-07-22): acurácia independente da infra do resolver/hosting.
+def test_txt_lookup_failure_returns_none() -> None:
+    import dns.exception
+
+    class Boom:
+        def resolve(self, name, rdtype):  # type: ignore[no-untyped-def]
+            raise dns.exception.Timeout()
+
+    assert de._txt_records(Boom(), "example.com") is None  # falha != ausência
+
+
+def test_txt_real_absence_returns_empty() -> None:
+    class NoRec:
+        def resolve(self, name, rdtype):  # type: ignore[no-untyped-def]
+            raise dns.resolver.NXDOMAIN()
+
+    assert de._txt_records(NoRec(), "example.com") == []
+
+
+def test_dns_failure_does_not_claim_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    # SERVFAIL/timeout → _txt_records=None → NÃO afirmar SPF/DMARC ausente (era falso -8pt).
+    monkeypatch.setattr(de, "_resolver", lambda: FakeResolver())
+    monkeypatch.setattr(de, "_txt_records", lambda _r, name: None)
+    ids = _run()
+    assert "SPF_AUSENTE" not in ids
+    assert "DMARC_AUSENTE" not in ids
+
+
+def test_provider_hosted_skips_email_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # github.io & cia.: DNS/e-mail são do provedor — não dinga o dono do site.
+    _patch(monkeypatch, {}, FakeResolver())
+    ids = _run("paulo.github.io")
+    assert "DNS_HOSPEDAGEM_GERENCIADA" in ids
+    assert "DMARC_AUSENTE" not in ids
+    assert "SPF_AUSENTE" not in ids

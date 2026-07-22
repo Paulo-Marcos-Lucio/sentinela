@@ -19,6 +19,34 @@ class _Cookie:
     same_site: str | None
 
 
+# Nomes que sugerem cookie de sessão/autenticação — onde a falta de HttpOnly é séria
+# (XSS rouba a sessão). Em cookie funcional/analytics, JS pode precisar lê-lo: não é MEDIUM.
+_SESSION_HINTS = (
+    "sess",
+    "sid",
+    "auth",
+    "token",
+    "jwt",
+    "sso",
+    "login",
+    "logon",
+    "remember",
+    "csrf",
+    "xsrf",
+    "access",
+    "refresh",
+    "id_token",
+    "phpsessid",
+    "jsessionid",
+    "connect.sid",
+)
+
+
+def _is_session_like(name: str) -> bool:
+    lowered = name.lower()
+    return any(hint in lowered for hint in _SESSION_HINTS)
+
+
 def _parse_cookie(raw: str) -> _Cookie:
     parts = [p.strip() for p in raw.split(";")]
     name = parts[0].split("=", 1)[0].strip() if parts else ""
@@ -53,20 +81,41 @@ class CookiesChecker(Checker):
         sem_samesite = [c.name for c in cookies if not c.same_site]
 
         if sem_httponly:
-            yield Finding(
-                id="COOKIE_SEM_HTTPONLY",
-                title="Cookie(s) sem flag HttpOnly",
-                category=self.category,
-                severity=Severity.MEDIUM,
-                description=f"Cookies sem `HttpOnly`: {', '.join(sem_httponly)}.",
-                evidence=", ".join(sem_httponly),
-                impact=(
-                    "Sem HttpOnly, o cookie é acessível via JavaScript "
-                    "(`document.cookie`). Um XSS consegue roubar a sessão diretamente."
-                ),
-                recommendation="Marque cookies de sessão/autenticação com `HttpOnly`.",
-                references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
-            )
+            session_like = [n for n in sem_httponly if _is_session_like(n)]
+            if session_like:
+                yield Finding(
+                    id="COOKIE_SEM_HTTPONLY",
+                    title="Cookie de sessão/autenticação sem flag HttpOnly",
+                    category=self.category,
+                    severity=Severity.MEDIUM,
+                    description=f"Cookies de sessão/auth sem `HttpOnly`: {', '.join(session_like)}.",
+                    evidence=", ".join(session_like),
+                    impact=(
+                        "Sem HttpOnly, o cookie é acessível via JavaScript "
+                        "(`document.cookie`). Um XSS consegue roubar a sessão diretamente."
+                    ),
+                    recommendation="Marque cookies de sessão/autenticação com `HttpOnly`.",
+                    references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
+                )
+            else:
+                yield Finding(
+                    id="COOKIE_SEM_HTTPONLY_FUNCIONAL",
+                    title="Cookie(s) sem HttpOnly (aparentemente funcionais)",
+                    category=self.category,
+                    severity=Severity.LOW,
+                    description=f"Cookies sem `HttpOnly`: {', '.join(sem_httponly)}.",
+                    evidence=", ".join(sem_httponly),
+                    impact=(
+                        "HttpOnly protege cookies de SESSÃO contra roubo via XSS. Nenhum destes "
+                        "tem nome de sessão/auth — se realmente forem funcionais (analytics, "
+                        "preferências, anti-abuso), o JS pode precisar lê-los e a ausência é aceitável."
+                    ),
+                    recommendation=(
+                        "Confirme que nenhum destes carrega sessão/autenticação. Se algum carregar, "
+                        "marque-o com `HttpOnly`."
+                    ),
+                    references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
+                )
 
         if serves_https and sem_secure:
             yield Finding(

@@ -35,3 +35,16 @@ def test_secure_nao_exigido_em_http() -> None:
 
 def test_sem_cookies_nao_gera_achado() -> None:
     assert _run(()) == set()
+
+
+# Bateria de campo (2026-07-22): HttpOnly só é MEDIUM em cookie de sessão/auth.
+# Cookie funcional (analytics/anti-abuso) sem HttpOnly é LOW, não MEDIUM (ex.: _octo do github.com).
+def test_cookie_funcional_sem_httponly_e_low() -> None:
+    ids = _run(("_ga=GA1.2.123; Secure; SameSite=Lax",))
+    assert "COOKIE_SEM_HTTPONLY_FUNCIONAL" in ids
+    assert "COOKIE_SEM_HTTPONLY" not in ids  # não é MEDIUM
+
+
+def test_cookie_de_sessao_sem_httponly_continua_medium() -> None:
+    ids = _run(("session_token=abc; Secure; SameSite=Lax",))
+    assert "COOKIE_SEM_HTTPONLY" in ids

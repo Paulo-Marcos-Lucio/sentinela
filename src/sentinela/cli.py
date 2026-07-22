@@ -76,16 +76,18 @@ _FALHA_SEV = {
 def scan(
     url: Annotated[str, typer.Argument(help="Alvo: domínio ou URL (ex.: exemplo.com.br).")],
     formato: Annotated[
-        list[Formato] | None, typer.Option("--formato", "-f", help="Formato(s) de saída. Repetível.")
+        list[Formato] | None,
+        typer.Option("--formato", "--format", "-f", help="Formato(s) de saída. Repetível."),
     ] = None,
     saida: Annotated[
         Path | None,
-        typer.Option("--saida", "-o", help="Arquivo de saída (para 1 formato de arquivo)."),
+        typer.Option("--saida", "--output", "-o", help="Arquivo de saída (para 1 formato de arquivo)."),
     ] = None,
     autorizado: Annotated[
         bool,
         typer.Option(
             "--autorizado",
+            "--authorized",
             help="ATIVA checagens intrusivas. Declare somente com autorização por escrito do alvo.",
         ),
     ] = False,
@@ -94,20 +96,27 @@ def scan(
         bool,
         typer.Option(
             "--sem-verificacao-tls",
+            "--no-verify-tls",
             help="INSEGURO: desabilita a validação de certificado TLS em todas as conexões (sujeito a MITM). Os achados de TLS ainda são reportados.",
         ),
     ] = False,
     pular: Annotated[
-        list[str] | None, typer.Option("--pular", help="IDs de checagem a pular. Repetível.")
+        list[str] | None,
+        typer.Option("--pular", "--skip", help="IDs de checagem a pular. Repetível."),
     ] = None,
     somente: Annotated[
-        list[str] | None, typer.Option("--somente", help="Roda somente estes IDs. Repetível.")
+        list[str] | None,
+        typer.Option("--somente", "--only", help="Roda somente estes IDs. Repetível."),
     ] = None,
-    user_agent: Annotated[str | None, typer.Option(help="User-Agent customizado.")] = None,
+    user_agent: Annotated[str | None, typer.Option("--user-agent", help="User-Agent customizado.")] = None,
     falhar_em: Annotated[
         NivelFalha,
-        typer.Option("--falhar-em", help="Código de saída 1 se houver achado >= este nível (útil em CI)."),
-    ] = NivelFalha.nenhum,
+        typer.Option(
+            "--falhar-em",
+            "--fail-on",
+            help="Código de saída 1 se houver achado >= este nível (útil em CI).",
+        ),
+    ] = NivelFalha.alta,
 ) -> None:
     """Executa uma varredura de diagnóstico no ALVO informado."""
     formatos = formato or [Formato.console]

@@ -24,6 +24,30 @@ from sentinela.knowledge import references as ref
 # Extrator offline e determinístico (usa o snapshot embutido da PSL, sem rede).
 _EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
 
+# Hospedagens gerenciadas (páginas estáticas/PaaS): o DONO do site NÃO controla o DNS do
+# apex nem envia e-mail por esse nome. SPF/DMARC/CAA/DNSSEC 'ausente' aqui é do provedor —
+# afirmá-lo contra o cliente é impreciso e não-acionável.
+_PROVIDER_HOSTED = frozenset(
+    {
+        "github.io",
+        "gitlab.io",
+        "netlify.app",
+        "vercel.app",
+        "herokuapp.com",
+        "pages.dev",
+        "web.app",
+        "firebaseapp.com",
+        "azurewebsites.net",
+        "onrender.com",
+        "surge.sh",
+        "readthedocs.io",
+        "bitbucket.io",
+        "workers.dev",
+        "fly.dev",
+        "render.com",
+    }
+)
+
 _DNS_TIMEOUT = 5.0
 
 
@@ -34,11 +58,15 @@ def _resolver() -> dns.resolver.Resolver:
     return resolver
 
 
-def _txt_records(resolver: dns.resolver.Resolver, name: str) -> list[str]:
+def _txt_records(resolver: dns.resolver.Resolver, name: str) -> list[str] | None:
+    """TXT do nome. ``[]`` = consulta OK e sem registro (ausência REAL); ``None`` = a consulta
+    FALHOU (timeout/SERVFAIL/NoNameservers) → inconclusivo, não se pode afirmar ausência."""
     try:
         answer = resolver.resolve(name, "TXT")
-    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN, dns.exception.DNSException):
-        return []
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return []  # resolveu, mas não há registro → ausência real
+    except dns.exception.DNSException:
+        return None  # timeout/SERVFAIL/etc. → NÃO afirmar 'ausente' (acurácia de campo)
     records: list[str] = []
     for rdata in answer:
         # Junta os fragmentos de uma string TXT longa.
@@ -62,6 +90,28 @@ class DnsEmailChecker(Checker):
         if not domain:
             return
 
+        if self._is_provider_hosted(host):
+            yield Finding(
+                id="DNS_HOSPEDAGEM_GERENCIADA",
+                title="Domínio em hospedagem gerenciada (DNS/e-mail do provedor)",
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    f"`{domain}` está sob hospedagem gerenciada — o dono do site não controla o "
+                    "DNS do apex nem envia e-mail por esse nome."
+                ),
+                impact=(
+                    "Checagens de SPF/DMARC/CAA/DNSSEC não se aplicam (ou não são acionáveis) aqui: "
+                    "elas pertencem ao provedor, não a você. Puladas para não gerar achado enganoso."
+                ),
+                recommendation=(
+                    "Para postura de e-mail/DNS, rode a Sentinela contra o seu DOMÍNIO PRÓPRIO "
+                    "(ex.: empresa.com.br), não contra a URL de páginas do provedor."
+                ),
+                references=(ref.DMARC_ORG,),
+            )
+            return
+
         resolver = _resolver()
         yield from self._check_spf(resolver, domain)
         yield from self._check_dmarc(resolver, domain)
@@ -76,8 +126,15 @@ class DnsEmailChecker(Checker):
             return top or None
         return ext.registered_domain or None
 
+    def _is_provider_hosted(self, host: str) -> bool:
+        h = host.lower().rstrip(".")
+        return any(h == p or h.endswith("." + p) for p in _PROVIDER_HOSTED)
+
     def _check_spf(self, resolver: dns.resolver.Resolver, domain: str) -> Iterable[Finding]:
-        spf = [r for r in _txt_records(resolver, domain) if r.lower().startswith("v=spf1")]
+        txt = _txt_records(resolver, domain)
+        if txt is None:
+            return  # consulta inconclusiva — não afirmar SPF ausente
+        spf = [r for r in txt if r.lower().startswith("v=spf1")]
         if not spf:
             yield Finding(
                 id="SPF_AUSENTE",
@@ -117,9 +174,10 @@ class DnsEmailChecker(Checker):
             )
 
     def _check_dmarc(self, resolver: dns.resolver.Resolver, domain: str) -> Iterable[Finding]:
-        records = [
-            r for r in _txt_records(resolver, f"_dmarc.{domain}") if r.lower().startswith("v=dmarc1")
-        ]
+        txt = _txt_records(resolver, f"_dmarc.{domain}")
+        if txt is None:
+            return  # consulta inconclusiva — não afirmar DMARC ausente
+        records = [r for r in txt if r.lower().startswith("v=dmarc1")]
         if not records:
             yield Finding(
                 id="DMARC_AUSENTE",
