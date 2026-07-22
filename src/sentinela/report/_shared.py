@@ -24,6 +24,13 @@ def ordered_counts(result: ScanResult) -> list[tuple[Severity, int]]:
     return [(sev, counts[sev]) for sev in SEVERITY_ORDER]
 
 
+def top_priorities(findings: list[Finding], limit: int = 3) -> list[Finding]:
+    """Achados mais graves (Média+) que merecem ação primeiro — o plano de ação da demo."""
+    acionaveis = [f for f in findings if int(f.severity) >= int(Severity.MEDIUM)]
+    acionaveis.sort(key=lambda f: (-int(f.severity), f.title))
+    return acionaveis[:limit]
+
+
 def grouped_by_category(findings: list[Finding]) -> dict[Category, list[Finding]]:
     """Agrupa os achados por categoria, ordenando por severidade dentro do grupo."""
     grupos: dict[Category, list[Finding]] = {}

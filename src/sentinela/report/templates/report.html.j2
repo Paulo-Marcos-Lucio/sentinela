@@ -48,10 +48,24 @@
   .chip { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); }
   .chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 
-  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 32px; padding: 16px 20px;
+  .facts { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0 0 24px; padding: 16px 20px;
     background: var(--brand-soft); border-radius: 12px; font-size: 13px; }
   .facts b { color: var(--ink); }
   .facts .k { color: var(--brand); font-weight: 700; }
+
+  .priorities { background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 22px 26px; margin-bottom: 32px; }
+  .priorities h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--brand); }
+  .prio-list { list-style: none; counter-reset: prio; margin: 0; padding: 0; }
+  .prio-list li { position: relative; padding: 12px 0 12px 44px; border-top: 1px solid var(--line); }
+  .prio-list li:first-child { border-top: none; }
+  .prio-list li::before { counter-increment: prio; content: counter(prio); position: absolute; left: 0; top: 12px;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--brand); color: #fff;
+    display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+  .prio-list .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .prio-list .title { font-weight: 700; }
+  .prio-fix { color: var(--muted); font-size: 14px; margin-top: 4px; }
 
   h3.cat { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted);
     margin: 32px 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -129,6 +143,23 @@
     <div><span class="k">Modo</span> <b>{{ mode }}</b></div>
     <div><span class="k">Taxonomia</span> <b>OWASP Top 10:2025 + CWE</b></div>
   </div>
+
+  {% if priorities %}
+  <section class="priorities">
+    <h2>🎯 Plano de ação — comece por aqui</h2>
+    <ol class="prio-list">
+      {% for p in priorities %}
+      <li>
+        <div class="head">
+          <span class="sev" style="background: {{ p.severity_color }};">{{ p.severity }}</span>
+          <span class="title">{{ p.title }}</span>
+        </div>
+        <div class="prio-fix">{{ p.recommendation }}</div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
 
   {% if groups %}
     {% for group in groups %}

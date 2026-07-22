@@ -8,7 +8,12 @@ from jinja2 import Environment
 
 from sentinela.core.models import ScanResult
 from sentinela.knowledge.mapping import tag_for
-from sentinela.report._shared import grouped_by_category, ordered_counts, score_of
+from sentinela.report._shared import (
+    grouped_by_category,
+    ordered_counts,
+    score_of,
+    top_priorities,
+)
 
 _TEMPLATE = files("sentinela.report").joinpath("templates/report.html.j2").read_text("utf-8")
 
@@ -18,6 +23,16 @@ def render_html(result: ScanResult) -> str:
 
     counts = [{"label": sev.label, "qtd": qtd, "color": sev.color} for sev, qtd in ordered_counts(result)]
     total = sum(qtd for _, qtd in ordered_counts(result))
+
+    priorities = [
+        {
+            "title": f.title,
+            "severity": f.severity.label,
+            "severity_color": f.severity.color,
+            "recommendation": f.recommendation,
+        }
+        for f in top_priorities(result.findings)
+    ]
 
     groups = []
     for categoria, findings in grouped_by_category(result.findings).items():
@@ -54,6 +69,7 @@ def render_html(result: ScanResult) -> str:
         score=score,
         counts=counts,
         total=total,
+        priorities=priorities,
         groups=groups,
         checks_run=len(result.checks_run),
         errors=[{"check": e.check_id, "message": e.message} for e in result.errors],

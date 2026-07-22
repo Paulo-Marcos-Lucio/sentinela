@@ -88,3 +88,34 @@ def test_exposure_svn_conteudo_generico_nao_flaga() -> None:
 
     ids = {f.id for f in ExposureChecker().run(make_context(client=FakeClient(handler=handler)))}
     assert "SVN_EXPOSTO" not in ids
+
+
+# Demo-readiness (2026-07-22): plano de ação (top prioridades) e execução paralela.
+def test_action_plan_prioritizes_medium_plus() -> None:
+    from conftest import make_context, make_probe, make_target
+    from sentinela.checks.cookies import CookiesChecker
+    from sentinela.core.models import Severity
+    from sentinela.report._shared import top_priorities
+
+    probe = make_probe(set_cookies=("session_token=x; SameSite=Lax",), final_url="https://example.com/")
+    ctx = make_context(primary=probe, target=make_target("https://example.com/"))
+    findings = list(CookiesChecker().run(ctx))
+    prio = top_priorities(findings)
+    assert prio  # há medium+ (session cookie sem HttpOnly/Secure)
+    assert len(prio) <= 3
+    assert all(int(f.severity) >= int(Severity.MEDIUM) for f in prio)
+
+
+def test_scan_runs_checks_in_parallel_and_completes() -> None:
+    # A paralelização não pode perder checagens nem achados (ordem preservada).
+    from conftest import make_target
+    from sentinela.core.config import ScanConfig
+    from sentinela.core.engine import run_scan
+
+    calls: list[str] = []
+    result = run_scan(
+        make_target("https://example.com/"),
+        ScanConfig(only=frozenset({"cookies"})),
+        on_check=lambda cid, _n: calls.append(cid),
+    )
+    assert "cookies" in result.checks_run

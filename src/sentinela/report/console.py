@@ -10,7 +10,12 @@ from rich.text import Text
 
 from sentinela.core.models import Finding, ScanResult, Severity
 from sentinela.knowledge.mapping import tag_for
-from sentinela.report._shared import grouped_by_category, ordered_counts, score_of
+from sentinela.report._shared import (
+    grouped_by_category,
+    ordered_counts,
+    score_of,
+    top_priorities,
+)
 
 _SEV_STYLE = {
     Severity.CRITICAL: "bold white on red",
@@ -64,6 +69,20 @@ def render_console(result: ScanResult, console: Console | None = None) -> None:
         tabela.add_row(Text(sev.label, style=estilo), str(qtd))
     console.print(tabela)
     console.print()
+
+    prioridades = top_priorities(result.findings)
+    if prioridades:
+        corpo = Text()
+        for i, finding in enumerate(prioridades, start=1):
+            if i > 1:
+                corpo.append("\n\n")
+            etiqueta = Text(f" {_SEV_TAG[finding.severity]} ", style=_SEV_STYLE[finding.severity])
+            corpo.append_text(Text.assemble((f"{i}. ", "bold"), etiqueta, " ", (finding.title, "bold")))
+            corpo.append_text(Text.assemble("\n   → ", (finding.recommendation, "dim")))
+        console.print(
+            Panel(corpo, title="🎯 Plano de ação — comece por aqui", border_style="green", box=box.ROUNDED)
+        )
+        console.print()
 
     if not result.findings:
         console.print("[green]✓ Nenhum achado registrado pelas checagens executadas.[/]")

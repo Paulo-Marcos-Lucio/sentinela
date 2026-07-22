@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
+from sentinela.checks.base import Checker
 from sentinela.core.config import ScanConfig
 from sentinela.core.context import ScanContext
 from sentinela.core.http import HttpClient, Probe
-from sentinela.core.models import ScanError, ScanResult, Target
+from sentinela.core.models import Finding, ScanError, ScanResult, Target
 from sentinela.core.registry import build_checkers
 from sentinela.version import __version__
 
 # Callback opcional de progresso: recebe (check_id, nome).
 ProgressCallback = Callable[[str, str], None]
+
+_MAX_WORKERS = 8
 
 
 def run_scan(
@@ -24,8 +28,9 @@ def run_scan(
 ) -> ScanResult:
     """Executa a varredura completa e devolve um :class:`ScanResult`.
 
-    Uma falha em uma checagem individual é capturada e registrada em
-    ``result.errors`` — nunca interrompe a varredura das demais.
+    As checagens rodam em PARALELO (são I/O — HTTP/DNS/TLS independentes): o tempo
+    total fica limitado pela checagem mais lenta, não pela soma. Uma falha em uma
+    checagem é capturada em ``result.errors`` — nunca interrompe as demais.
     """
     result = ScanResult(target=target, intrusive=config.intrusive, tool_version=__version__)
 
@@ -47,16 +52,24 @@ def run_scan(
             http_probe=http_probe,
         )
 
-        for checker in build_checkers(config):
+        checkers = build_checkers(config)
+
+        def _run_one(checker: Checker) -> tuple[str, list[Finding], ScanError | None]:
             if on_check is not None:
                 on_check(checker.id, checker.name)
             try:
-                findings = list(checker.run(ctx))
-            except Exception as exc:  # noqa: BLE001 - resiliência: nenhuma checagem derruba a varredura
-                result.errors.append(ScanError(checker.id, f"{type(exc).__name__}: {exc}"))
-                continue
-            result.extend(findings)
-            result.checks_run.append(checker.id)
+                return checker.id, list(checker.run(ctx)), None
+            except Exception as exc:  # noqa: BLE001 - nenhuma checagem derruba a varredura
+                return checker.id, [], ScanError(checker.id, f"{type(exc).__name__}: {exc}")
+
+        # httpx.Client é thread-safe; cada checagem usa recursos independentes.
+        with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(checkers) or 1)) as pool:
+            for check_id, findings, error in pool.map(_run_one, checkers):  # ordem preservada
+                if error is not None:
+                    result.errors.append(error)
+                    continue
+                result.extend(findings)
+                result.checks_run.append(check_id)
 
     result.finished_at = datetime.now(timezone.utc)
     return result
