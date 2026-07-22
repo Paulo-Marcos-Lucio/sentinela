@@ -91,7 +91,7 @@ def scan(
             help="ATIVA checagens intrusivas. Declare somente com autorização por escrito do alvo.",
         ),
     ] = False,
-    timeout: Annotated[float, typer.Option(help="Timeout por requisição, em segundos.")] = 15.0,
+    timeout: Annotated[float, typer.Option(help="Timeout por requisição, em segundos.")] = 8.0,
     sem_verificacao_tls: Annotated[
         bool,
         typer.Option(

@@ -9,9 +9,11 @@ de assinatura obsoleto. Tudo defensivo: qualquer erro inesperado resulta em
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 import ssl
 from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from cryptography import x509
@@ -22,7 +24,10 @@ from sentinela.core.context import ScanContext
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
-_HANDSHAKE_TIMEOUT = 10.0
+# Timeout por handshake. Servidor OK responde em <1s; o teto só é atingido em host
+# lento/que descarta a conexão em silêncio — por isso as conexões rodam em PARALELO
+# (o check inteiro fica limitado a UM handshake, não à soma de quatro).
+_HANDSHAKE_TIMEOUT = 6.0
 
 
 class TlsChecker(Checker):
@@ -35,10 +40,21 @@ class TlsChecker(Checker):
         host = ctx.target.host
         port = ctx.target.port if ctx.target.is_https else 443
 
-        der = _fetch_certificate(host, port)
+        # As conexões TLS são independentes → em paralelo, evitando um host lento
+        # transformar 4×timeout em ~40s (o que travaria uma demo).
+        is_ip = _is_ip(host)
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            cert_future = pool.submit(_fetch_certificate, host, port)
+            # Alvo IP puro: a validação de cadeia por hostname não se aplica (o navegador
+            # casaria contra IP SAN); a checagem de hostname abaixo já cobre o IP SAN.
+            trust_future = None if is_ip else pool.submit(_trust_error, host, port)
+            legacy_future = pool.submit(_accepts_legacy_tls, host, port)
+            der = cert_future.result()
+            trust_error = trust_future.result() if trust_future is not None else None
+            legados = legacy_future.result()
+
         if der is None:
             return  # sem endpoint TLS acessível — não é papel desta checagem relatar
-
         try:
             cert = x509.load_der_x509_certificate(der)
         except ValueError:
@@ -47,8 +63,22 @@ class TlsChecker(Checker):
         yield from self._check_expiry(cert)
         yield from self._check_hostname(cert, host)
         yield from self._check_key_and_signature(cert)
-        yield from self._check_trust(host, port)
-        yield from self._check_protocols(host, port)
+        if trust_error is not None:
+            yield Finding(
+                id="CERT_NAO_CONFIAVEL",
+                title="Certificado não confiável",
+                category=self.category,
+                severity=Severity.HIGH,
+                description="A validação padrão do certificado falhou (cadeia não confiável).",
+                evidence=trust_error,
+                impact=(
+                    "Certificados autoassinados ou de cadeia incompleta fazem o "
+                    "navegador alertar o usuário e comprometem a confiança na conexão."
+                ),
+                recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
+                references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
+            )
+        yield from self._check_protocols(legados)
 
     def _check_expiry(self, cert: x509.Certificate) -> Iterable[Finding]:
         not_after = _not_valid_after(cert)
@@ -84,6 +114,25 @@ class TlsChecker(Checker):
             )
 
     def _check_hostname(self, cert: x509.Certificate, host: str) -> Iterable[Finding]:
+        if _is_ip(host):
+            ip_sans = _san_ip_names(cert)
+            if ip_sans and host not in ip_sans:
+                yield Finding(
+                    id="CERT_HOSTNAME_INVALIDO",
+                    title="Certificado não cobre o IP acessado",
+                    category=self.category,
+                    severity=Severity.HIGH,
+                    description="O IP acessado não consta como IP SAN no certificado.",
+                    evidence=f"host={host} · IP SANs={', '.join(ip_sans[:5])}",
+                    impact=(
+                        "Um certificado que não corresponde ao endereço quebra a garantia "
+                        "de identidade e faz o navegador bloquear a conexão."
+                    ),
+                    recommendation="Acesse o serviço pelo hostname coberto pelo certificado, "
+                    "ou emita um certificado com o IP no SAN.",
+                    references=(ref.OWASP_TLS_CHEATSHEET,),
+                )
+            return  # não comparar IP contra SANs de DNS (geraria falso-positivo)
         names = _san_dns_names(cert)
         if names and not _hostname_matches(host, names):
             yield Finding(
@@ -130,42 +179,7 @@ class TlsChecker(Checker):
                 references=(ref.MOZILLA_TLS,),
             )
 
-    def _check_trust(self, host: str, port: int) -> Iterable[Finding]:
-        """Tenta uma conexão *verificada*; falha indica cadeia não confiável."""
-        context = ssl.create_default_context()
-        try:
-            with (
-                socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
-                context.wrap_socket(sock, server_hostname=host),
-            ):
-                return
-        except ssl.SSLCertVerificationError as exc:
-            code = getattr(exc, "verify_code", None)
-            msg = str(getattr(exc, "verify_message", "") or exc).lower()
-            # Expiração e hostname divergente já têm checagens dedicadas (que inspecionam
-            # o certificado direto). Aqui só reportamos falha de CADEIA de confiança,
-            # para não duplicar o achado nem rotular a causa errada.
-            if code in (9, 10) or "expired" in msg or "hostname mismatch" in msg or "not valid for" in msg:
-                return
-            yield Finding(
-                id="CERT_NAO_CONFIAVEL",
-                title="Certificado não confiável",
-                category=self.category,
-                severity=Severity.HIGH,
-                description="A validação padrão do certificado falhou (cadeia não confiável).",
-                evidence=_short(str(exc)),
-                impact=(
-                    "Certificados autoassinados ou de cadeia incompleta fazem o "
-                    "navegador alertar o usuário e comprometem a confiança na conexão."
-                ),
-                recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
-                references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
-            )
-        except (OSError, ssl.SSLError):
-            return
-
-    def _check_protocols(self, host: str, port: int) -> Iterable[Finding]:
-        legados = _accepts_legacy_tls(host, port)
+    def _check_protocols(self, legados: list[str]) -> Iterable[Finding]:
         if legados:
             yield Finding(
                 id="TLS_PROTOCOLO_LEGADO",
@@ -202,10 +216,31 @@ def _fetch_certificate(host: str, port: int) -> bytes | None:
         return None
 
 
+def _trust_error(host: str, port: int) -> str | None:
+    """``None`` se a cadeia é confiável (ou a falha já tem checagem dedicada); caso
+    contrário, a mensagem curta da falha de CADEIA de confiança."""
+    context = ssl.create_default_context()
+    try:
+        with (
+            socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
+            context.wrap_socket(sock, server_hostname=host),
+        ):
+            return None
+    except ssl.SSLCertVerificationError as exc:
+        code = getattr(exc, "verify_code", None)
+        msg = str(getattr(exc, "verify_message", "") or exc).lower()
+        # Expiração e hostname divergente já têm checagens dedicadas — não duplicar.
+        if code in (9, 10) or "expired" in msg or "hostname mismatch" in msg or "not valid for" in msg:
+            return None
+        return _short(str(exc))
+    except (OSError, ssl.SSLError):
+        return None
+
+
 def _accepts_legacy_tls(host: str, port: int) -> list[str]:
-    """Testa, de forma tolerante, se TLS 1.0/1.1 são aceitos pelo servidor."""
-    aceitos: list[str] = []
-    for versao, rotulo in ((ssl.TLSVersion.TLSv1, "TLS 1.0"), (ssl.TLSVersion.TLSv1_1, "TLS 1.1")):
+    """Testa, de forma tolerante e em PARALELO, se TLS 1.0/1.1 são aceitos."""
+
+    def probe(versao: ssl.TLSVersion, rotulo: str) -> str | None:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
@@ -213,16 +248,20 @@ def _accepts_legacy_tls(host: str, port: int) -> list[str]:
             context.minimum_version = versao
             context.maximum_version = versao
         except (ValueError, OSError):
-            continue  # OpenSSL local não permite forçar essa versão
+            return None  # OpenSSL local não permite forçar essa versão
         try:
             with (
                 socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
                 context.wrap_socket(sock, server_hostname=host),
             ):
-                aceitos.append(rotulo)
+                return rotulo
         except (OSError, ssl.SSLError):
-            continue
-    return aceitos
+            return None
+
+    versoes = ((ssl.TLSVersion.TLSv1, "TLS 1.0"), (ssl.TLSVersion.TLSv1_1, "TLS 1.1"))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        resultados = list(pool.map(lambda vr: probe(*vr), versoes))
+    return [r for r in resultados if r is not None]
 
 
 def _not_valid_after(cert: x509.Certificate) -> datetime:
@@ -234,12 +273,28 @@ def _not_valid_after(cert: x509.Certificate) -> datetime:
     return naive.replace(tzinfo=timezone.utc)
 
 
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
 def _san_dns_names(cert: x509.Certificate) -> list[str]:
     try:
         ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
     except x509.ExtensionNotFound:
         return []
     return list(ext.value.get_values_for_type(x509.DNSName))
+
+
+def _san_ip_names(cert: x509.Certificate) -> list[str]:
+    try:
+        ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
+    except x509.ExtensionNotFound:
+        return []
+    return [str(ip) for ip in ext.value.get_values_for_type(x509.IPAddress)]
 
 
 def _hostname_matches(host: str, patterns: list[str]) -> bool:

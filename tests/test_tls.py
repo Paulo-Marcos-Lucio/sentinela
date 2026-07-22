@@ -87,3 +87,36 @@ def test_hostname_matches_wildcard() -> None:
     assert not _hostname_matches("a.b.exemplo.com", ["*.exemplo.com"])
     assert _hostname_matches("exemplo.com", ["exemplo.com"])
     assert not _hostname_matches("exemplo.com", ["*.exemplo.com"])
+
+
+# Alvo IP puro: comparar contra IP SANs (não DNS) — evita falso-positivo de cert (ex.: 1.1.1.1).
+def test_ip_target_matched_against_ip_san() -> None:
+    import ipaddress
+
+    from cryptography.x509 import IPAddress, SubjectAlternativeName
+
+    from sentinela.checks.tls import _san_ip_names
+
+    key = _KEY_2048
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "svc")])
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=365))
+        .add_extension(SubjectAlternativeName([IPAddress(ipaddress.ip_address("1.2.3.4"))]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    assert _san_ip_names(cert) == ["1.2.3.4"]
+    assert {f.id for f in checker._check_hostname(cert, "1.2.3.4")} == set()  # coberto → sem FP
+    assert "CERT_HOSTNAME_INVALIDO" in {f.id for f in checker._check_hostname(cert, "9.9.9.9")}
+
+
+def test_ip_target_not_compared_to_dns_san() -> None:
+    # cert só com DNS SAN, alvo IP → não flagra (não compara IP contra nome DNS).
+    cert = _cert("example.com")
+    assert {f.id for f in checker._check_hostname(cert, "203.0.113.7")} == set()

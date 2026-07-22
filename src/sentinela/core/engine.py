@@ -39,11 +39,17 @@ def run_scan(
         user_agent=config.user_agent,
         verify_tls=config.verify_tls,
     ) as client:
-        primary = client.get(target.url)
+        # primary (HTTPS) e a sonda HTTP são independentes → em paralelo (num host que
+        # não responde, evita somar dois timeouts antes mesmo das checagens começarem).
+        with ThreadPoolExecutor(max_workers=2) as pre_pool:
+            primary_future = pre_pool.submit(client.get, target.url)
+            probe_future = pre_pool.submit(_probe_http, client, target)
+            primary = primary_future.result()
+            http_probe = probe_future.result()
+
         if not primary.ok:
             result.errors.append(ScanError("http", f"Falha ao acessar {target.url}: {primary.error}"))
 
-        http_probe = _probe_http(client, target)
         ctx = ScanContext(
             target=target,
             client=client,

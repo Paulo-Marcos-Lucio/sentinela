@@ -17,7 +17,7 @@ class ScanConfig:
     """
 
     intrusive: bool = False
-    timeout: float = 15.0
+    timeout: float = 8.0  # servidor OK responde em <2s; teto baixo mantém a demo ágil
     user_agent: str = USER_AGENT
     verify_tls: bool = True
     skip: frozenset[str] = field(default_factory=frozenset)
