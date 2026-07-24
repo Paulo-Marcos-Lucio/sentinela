@@ -20,8 +20,7 @@ from collections.abc import Iterable
 from sentinela.core.http import HttpClient
 
 _CERTSPOTTER = (
-    "https://api.certspotter.com/v1/issuances"
-    "?domain={domain}&include_subdomains=true&expand=dns_names"
+    "https://api.certspotter.com/v1/issuances?domain={domain}&include_subdomains=true&expand=dns_names"
 )
 _CRTSH = "https://crt.sh/?q=%25.{domain}&output=json"
 _TIMEOUT = 30.0  # essas fontes costumam ser lentas; teto próprio, sem afetar o resto da varredura

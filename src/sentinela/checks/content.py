@@ -44,9 +44,7 @@ _HREF_ATTR_RE = re.compile(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _REL_STYLESHEET_RE = re.compile(r"\brel\s*=\s*[\"'][^\"']*\bstylesheet\b", re.IGNORECASE)
 _INTEGRITY_RE = re.compile(r"\bintegrity\s*=", re.IGNORECASE)
 
-_FORM_ACTION_HTTP_RE = re.compile(
-    r"<form\b[^>]*?\baction\s*=\s*[\"']http://([^\"'>\s]+)", re.IGNORECASE
-)
+_FORM_ACTION_HTTP_RE = re.compile(r"<form\b[^>]*?\baction\s*=\s*[\"']http://([^\"'>\s]+)", re.IGNORECASE)
 _PASSWORD_INPUT_RE = re.compile(r"<input\b[^>]*?\btype\s*=\s*[\"']password[\"']", re.IGNORECASE)
 
 _MAX_EVIDENCIA = 5
@@ -103,8 +101,7 @@ class ContentChecker(Checker):
             category=self.category,
             severity=Severity.MEDIUM,
             description=(
-                "A página é servida por HTTPS, mas referencia sub-recursos por HTTP "
-                "(conteúdo misto)."
+                "A página é servida por HTTPS, mas referencia sub-recursos por HTTP (conteúdo misto)."
             ),
             evidence="http://" + " · http://".join(amostra),
             impact=(
@@ -151,8 +148,7 @@ class ContentChecker(Checker):
             category=self.category,
             severity=Severity.LOW,
             description=(
-                "Há scripts/estilos carregados de origens externas sem o atributo "
-                "`integrity` (SRI)."
+                "Há scripts/estilos carregados de origens externas sem o atributo `integrity` (SRI)."
             ),
             evidence=", ".join(amostra),
             impact=(

@@ -71,7 +71,9 @@ def test_xxss_protection_legado() -> None:
 
 def test_csp_wildcard_permissivo() -> None:
     headers = dict(BONS_HEADERS)
-    headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' https:; object-src 'none'; base-uri 'self'"
+    headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' https:; object-src 'none'; base-uri 'self'"
+    )
     ids = {f.id for f in _run(headers)}
     assert "CSP_WILDCARD_PERMISSIVO" in ids
 

@@ -188,9 +188,7 @@ class SubdomainTakeoverChecker(Checker):
             references=(ref.CRT_SH, ref.OWASP_WSTG_SUBDOMAIN),
         )
 
-    def _avaliar(
-        self, ctx: ScanContext, sub: str, cname: str, servico: _Servico
-    ) -> Iterable[Finding]:
+    def _avaliar(self, ctx: ScanContext, sub: str, cname: str, servico: _Servico) -> Iterable[Finding]:
         if servico.nxdomain_takeover:
             if _resolves(cname) is False:
                 yield self._takeover(
