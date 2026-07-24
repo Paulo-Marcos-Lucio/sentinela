@@ -10,7 +10,7 @@ from sentinela.checks.base import Checker
 from sentinela.core.config import ScanConfig
 from sentinela.core.context import ScanContext
 from sentinela.core.http import HttpClient, Probe
-from sentinela.core.models import Finding, ScanError, ScanResult, Target
+from sentinela.core.models import Category, Finding, ScanError, ScanResult, Severity, Target
 from sentinela.core.registry import build_checkers
 from sentinela.version import __version__
 
@@ -18,6 +18,11 @@ from sentinela.version import __version__
 ProgressCallback = Callable[[str, str], None]
 
 _MAX_WORKERS = 8
+
+# Corpo da resposta primária: teto maior que o padrão (4 KB) para que a análise de
+# conteúdo (mixed content, SRI, formulários) enxergue o <head> e os <script>/<link>
+# reais da página. Ainda limitado — o download continua interrompido por streaming.
+_PRIMARY_BODY_CAP = 262_144  # 256 KB
 
 
 def run_scan(
@@ -42,13 +47,39 @@ def run_scan(
         # primary (HTTPS) e a sonda HTTP são independentes → em paralelo (num host que
         # não responde, evita somar dois timeouts antes mesmo das checagens começarem).
         with ThreadPoolExecutor(max_workers=2) as pre_pool:
-            primary_future = pre_pool.submit(client.get, target.url)
+            primary_future = pre_pool.submit(
+                lambda: client.get(target.url, max_body_bytes=_PRIMARY_BODY_CAP)
+            )
             probe_future = pre_pool.submit(_probe_http, client, target)
             primary = primary_future.result()
             http_probe = probe_future.result()
 
         if not primary.ok:
             result.errors.append(ScanError("http", f"Falha ao acessar {target.url}: {primary.error}"))
+            # Achado explícito: sem a resposta principal, a avaliação fica incompleta. Isso TETA
+            # a nota em F (ver core/scoring.py) — a incapacidade de avaliar não pode virar nota boa.
+            result.add(
+                Finding(
+                    id="ALVO_INACESSIVEL",
+                    title="Alvo inacessível ou conexão não confiável",
+                    category=Category.TRANSPORT,
+                    severity=Severity.HIGH,
+                    description=(
+                        "A requisição principal ao alvo falhou (conexão recusada, timeout ou "
+                        "certificado TLS não confiável)."
+                    ),
+                    evidence=str(primary.error),
+                    impact=(
+                        "Sem a resposta principal, as checagens de cabeçalhos, cookies, CORS e "
+                        "conteúdo não puderam ser avaliadas. Do ponto de vista do usuário, o site "
+                        "está inacessível por um canal confiável."
+                    ),
+                    recommendation=(
+                        "Verifique a disponibilidade do alvo e a validade do certificado TLS; "
+                        "reexecute a varredura após corrigir."
+                    ),
+                )
+            )
 
         ctx = ScanContext(
             target=target,

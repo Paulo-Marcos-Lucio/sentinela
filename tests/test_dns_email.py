@@ -11,15 +11,28 @@ from sentinela.checks.dns_email import DnsEmailChecker, _is_ip
 
 
 class FakeResolver:
-    def __init__(self, *, caa_ok: bool = False, dnskey_ok: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        caa_ok: bool = False,
+        dnskey_ok: bool = False,
+        mx_ok: bool = False,
+        mx_null: bool = False,
+    ) -> None:
         self.caa_ok = caa_ok
         self.dnskey_ok = dnskey_ok
+        self.mx_ok = mx_ok
+        self.mx_null = mx_null
 
     def resolve(self, name: str, rdtype: str):  # type: ignore[no-untyped-def]
         if rdtype == "CAA" and self.caa_ok:
             return ["0 issue letsencrypt.org"]
         if rdtype == "DNSKEY" and self.dnskey_ok:
             return ["key"]
+        if rdtype == "MX" and self.mx_null:
+            return ["0 ."]  # null MX (RFC 7505)
+        if rdtype == "MX" and self.mx_ok:
+            return ["10 mx.example.com"]
         raise dns.resolver.NoAnswer()
 
 
@@ -113,3 +126,42 @@ def test_provider_hosted_skips_email_checks(monkeypatch: pytest.MonkeyPatch) -> 
     assert "DNS_HOSPEDAGEM_GERENCIADA" in ids
     assert "DMARC_AUSENTE" not in ids
     assert "SPF_AUSENTE" not in ids
+
+
+def test_mta_sts_e_tls_rpt_ausentes_quando_ha_mx(monkeypatch: pytest.MonkeyPatch) -> None:
+    txt = {"example.com": ["v=spf1 -all"], "_dmarc.example.com": ["v=DMARC1; p=reject"]}
+    _patch(monkeypatch, txt, FakeResolver(caa_ok=True, dnskey_ok=True, mx_ok=True))
+    ids = _run()
+    assert "MTA_STS_AUSENTE" in ids
+    assert "TLS_RPT_AUSENTE" in ids
+
+
+def test_sem_mx_nao_reporta_mta_sts(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sem MX confirmado, não afirmamos postura de e-mail (evita achado enganoso).
+    txt = {"example.com": ["v=spf1 -all"], "_dmarc.example.com": ["v=DMARC1; p=reject"]}
+    _patch(monkeypatch, txt, FakeResolver(caa_ok=True, dnskey_ok=True, mx_ok=False))
+    ids = _run()
+    assert "MTA_STS_AUSENTE" not in ids
+    assert "TLS_RPT_AUSENTE" not in ids
+
+
+def test_null_mx_nao_reporta_mta_sts(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Null MX (RFC 7505: `0 .`) = domínio não recebe e-mail → não exigir MTA-STS/TLS-RPT.
+    txt = {"example.com": ["v=spf1 -all"], "_dmarc.example.com": ["v=DMARC1; p=reject"]}
+    _patch(monkeypatch, txt, FakeResolver(caa_ok=True, dnskey_ok=True, mx_null=True))
+    ids = _run()
+    assert "MTA_STS_AUSENTE" not in ids
+    assert "TLS_RPT_AUSENTE" not in ids
+
+
+def test_mta_sts_publicado_nao_gera_achado(monkeypatch: pytest.MonkeyPatch) -> None:
+    txt = {
+        "example.com": ["v=spf1 -all"],
+        "_dmarc.example.com": ["v=DMARC1; p=reject"],
+        "_mta-sts.example.com": ["v=STSv1; id=20260722"],
+        "_smtp._tls.example.com": ["v=TLSRPTv1; rua=mailto:tls@example.com"],
+    }
+    _patch(monkeypatch, txt, FakeResolver(caa_ok=True, dnskey_ok=True, mx_ok=True))
+    ids = _run()
+    assert "MTA_STS_AUSENTE" not in ids
+    assert "TLS_RPT_AUSENTE" not in ids

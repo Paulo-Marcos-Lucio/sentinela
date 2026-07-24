@@ -17,6 +17,7 @@ class ScanConfig:
     """
 
     intrusive: bool = False
+    discover: bool = False  # descoberta de subdomínios via Certificate Transparency (passiva, opt-in)
     timeout: float = 8.0  # servidor OK responde em <2s; teto baixo mantém a demo ágil
     user_agent: str = USER_AGENT
     verify_tls: bool = True

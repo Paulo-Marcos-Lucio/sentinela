@@ -8,7 +8,9 @@ from sentinela.checks.security_headers import SecurityHeadersChecker
 # Um conjunto de cabeçalhos considerado "bom o suficiente" para não gerar achados fortes.
 BONS_HEADERS = {
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains",
-    "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'",
+    "Content-Security-Policy": (
+        "default-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    ),
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Permissions-Policy": "geolocation=()",
@@ -65,6 +67,39 @@ def test_xxss_protection_legado() -> None:
     headers["X-XSS-Protection"] = "1; mode=block"
     ids = {f.id for f in _run(headers)}
     assert "XXSS_PROTECTION_LEGADO" in ids
+
+
+def test_csp_wildcard_permissivo() -> None:
+    headers = dict(BONS_HEADERS)
+    headers["Content-Security-Policy"] = (
+        "default-src 'self'; script-src 'self' https:; object-src 'none'; base-uri 'self'"
+    )
+    ids = {f.id for f in _run(headers)}
+    assert "CSP_WILDCARD_PERMISSIVO" in ids
+
+
+def test_csp_sem_object_src_e_base_uri() -> None:
+    headers = dict(BONS_HEADERS)
+    headers["Content-Security-Policy"] = "default-src 'self'"
+    ids = {f.id for f in _run(headers)}
+    assert "CSP_SEM_OBJECT_SRC" in ids
+    assert "CSP_SEM_BASE_URI" in ids
+
+
+def test_csp_default_none_nao_exige_object_src() -> None:
+    headers = dict(BONS_HEADERS)
+    headers["Content-Security-Policy"] = "default-src 'none'; base-uri 'self'"
+    ids = {f.id for f in _run(headers)}
+    assert "CSP_SEM_OBJECT_SRC" not in ids
+
+
+def test_csp_apenas_report_only() -> None:
+    headers = dict(BONS_HEADERS)
+    del headers["Content-Security-Policy"]
+    headers["Content-Security-Policy-Report-Only"] = "default-src 'self'"
+    ids = {f.id for f in _run(headers)}
+    assert "CSP_APENAS_REPORT_ONLY" in ids
+    assert "CSP_AUSENTE" not in ids
 
 
 def test_probe_com_erro_nao_gera_achados() -> None:

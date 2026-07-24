@@ -97,8 +97,10 @@ class Category(str, Enum):
     CORS = "CORS"
     METHODS = "Métodos HTTP"
     DNS_EMAIL = "DNS / E-mail"
+    CONTENT = "Conteúdo da Página"
     INFO_DISCLOSURE = "Exposição de Informação"
     EXPOSURE = "Arquivos e Rotas Sensíveis"
+    SURFACE = "Superfície de Ataque"
     TRANSPORT = "Transporte / Redirecionamento"
 
     def __str__(self) -> str:  # pragma: no cover - trivial

@@ -48,3 +48,29 @@ def test_cookie_funcional_sem_httponly_e_low() -> None:
 def test_cookie_de_sessao_sem_httponly_continua_medium() -> None:
     ids = _run(("session_token=abc; Secure; SameSite=Lax",))
     assert "COOKIE_SEM_HTTPONLY" in ids
+
+
+def test_samesite_none_sem_secure() -> None:
+    ids = _run(("sid=abc; HttpOnly; SameSite=None",), final_url="http://example.com/")
+    assert "COOKIE_SAMESITE_NONE_INSEGURO" in ids
+
+
+def test_samesite_none_com_secure_ok() -> None:
+    ids = _run(("sid=abc; Secure; HttpOnly; SameSite=None",))
+    assert "COOKIE_SAMESITE_NONE_INSEGURO" not in ids
+
+
+def test_prefixo_host_invalido() -> None:
+    # __Host- exige Secure + Path=/ e sem Domain; aqui falta Secure
+    ids = _run(("__Host-sid=abc; HttpOnly; SameSite=Lax; Path=/",))
+    assert "COOKIE_PREFIXO_INVALIDO" in ids
+
+
+def test_prefixo_host_valido_ok() -> None:
+    ids = _run(("__Host-sid=abc; Secure; HttpOnly; SameSite=Lax; Path=/",))
+    assert "COOKIE_PREFIXO_INVALIDO" not in ids
+
+
+def test_prefixo_secure_sem_flag_secure() -> None:
+    ids = _run(("__Secure-sid=abc; HttpOnly; SameSite=Lax",))
+    assert "COOKIE_PREFIXO_INVALIDO" in ids

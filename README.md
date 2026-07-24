@@ -31,14 +31,17 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 
 | Módulo | O que analisa | OWASP 2025 |
 | --- | --- | --- |
-| **Cabeçalhos** | HSTS, CSP, X-Content-Type-Options, X-Frame-Options / clickjacking, Referrer-Policy, Permissions-Policy, COOP, X-XSS-Protection legado | A02 |
-| **TLS / Certificado** | Protocolos legados (TLS 1.0/1.1), certificado expirado/expirando, hostname divergente, chave RSA fraca, assinatura obsoleta, cadeia não confiável | A04 |
+| **Cabeçalhos** | HSTS, CSP com **análise profunda** (curinga, `object-src`, `base-uri`, `report-only`), X-Content-Type-Options, X-Frame-Options / clickjacking, Referrer-Policy, Permissions-Policy, COOP, X-XSS-Protection legado | A02 |
+| **TLS / Certificado** | Protocolos legados (TLS 1.0/1.1), **ausência de TLS 1.3**, cifra **sem Perfect Forward Secrecy**, certificado expirado/expirando, hostname divergente, chave RSA fraca, assinatura obsoleta, cadeia não confiável | A04 |
 | **Transporte** | Redirecionamento de HTTP → HTTPS | A04 |
-| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` | A01 / A04 / A07 |
+| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` — inclui `SameSite=None` inseguro e prefixos `__Host-`/`__Secure-` | A01 / A04 / A07 |
 | **CORS** | Reflexão de origem, curinga com credenciais, políticas permissivas | A01 |
 | **Métodos HTTP** | `TRACE` (XST), métodos de escrita expostos (`PUT`/`DELETE`) | A02 |
 | **Exposição de info** | Versão de servidor/stack vazada, listagem de diretório | A02 |
-| **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC | A02 / A04 / A07 |
+| **Conteúdo da página** | Conteúdo misto (*mixed content*), ausência de **SRI** em recursos de terceiros, formulário com `action` insegura, campo de senha sem HTTPS | A03 / A04 |
+| **Arquivos públicos** | `robots.txt` (RFC 9309) revelando caminhos sensíveis por convenção | A02 |
+| **Superfície de ataque** | Descoberta de subdomínios via **Certificate Transparency** e detecção de **subdomain takeover** (CNAME órfão) — opt-in `--descobrir` | A02 |
+| **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
 | **Rotas sensíveis** 🔒 | `.git`, `.env`, `.svn`, `server-status`, `phpinfo`, `security.txt` — **intrusivo, opt-in** | A02 |
 
 Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**, **impacto**, **recomendação prática** e **referências** (OWASP, MDN, RFC), além da classificação **OWASP Top 10:2025 + CWE**.
@@ -150,8 +153,8 @@ Use com responsabilidade. Veja [`SECURITY.md`](SECURITY.md) para divulgação re
 ## 🧭 Roadmap
 
 - [ ] Detecção de bibliotecas front-end desatualizadas (fingerprint) — A03 Supply Chain
-- [ ] Verificação de Subresource Integrity (SRI) em scripts de terceiros
-- [ ] Alerta de *dangling CNAME* (risco de subdomain takeover)
+- [x] Verificação de Subresource Integrity (SRI) em scripts de terceiros
+- [x] Alerta de *dangling CNAME* / subdomain takeover (descoberta via Certificate Transparency, opt-in `--descobrir`)
 - [ ] Exportação para SARIF (integração com o GitHub Security)
 - [ ] Perfis de varredura (`--perfil rapido|completo`)
 

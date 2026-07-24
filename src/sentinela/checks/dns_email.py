@@ -117,6 +117,12 @@ class DnsEmailChecker(Checker):
         yield from self._check_dmarc(resolver, domain)
         yield from self._check_caa(resolver, domain)
         yield from self._check_dnssec(resolver, domain)
+        # MTA-STS/TLS-RPT só fazem sentido se o domínio RECEBE e-mail (tem MX). Sem
+        # MX confirmado, não afirmamos ausência — evita achado enganoso em domínio
+        # que não trata e-mail por esse nome.
+        if self._has_mx(resolver, domain):
+            yield from self._check_mta_sts(resolver, domain)
+            yield from self._check_tls_rpt(resolver, domain)
 
     def _registrable(self, host: str) -> str | None:
         ext = _EXTRACT(host)
@@ -261,6 +267,71 @@ class DnsEmailChecker(Checker):
             recommendation="Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.",
             references=(ref.RFC_DNSSEC,),
         )
+
+    def _has_mx(self, resolver: dns.resolver.Resolver, domain: str) -> bool:
+        """Verdadeiro apenas se o domínio RECEBE e-mail. Consulta inconclusiva
+        (timeout/SERVFAIL) → ``False``, para não afirmar postura de e-mail sem
+        certeza. Trata o *null MX* (RFC 7505): um único registro com troca ``.``
+        significa 'este domínio NÃO recebe e-mail' — não deve exigir MTA-STS."""
+        try:
+            answer = resolver.resolve(domain, "MX")
+        except dns.exception.DNSException:
+            return False
+        exchanges: list[str] = []
+        for rdata in answer:
+            tokens = str(rdata).split()
+            exchanges.append(tokens[-1].rstrip(".") if tokens else "")
+        if not exchanges:
+            return False
+        # Null MX (RFC 7505): único registro com troca vazia (".") → não recebe e-mail.
+        return not (len(exchanges) == 1 and exchanges[0] == "")
+
+    def _check_mta_sts(self, resolver: dns.resolver.Resolver, domain: str) -> Iterable[Finding]:
+        txt = _txt_records(resolver, f"_mta-sts.{domain}")
+        if txt is None:
+            return  # inconclusivo
+        if not any(r.lower().startswith("v=stsv1") for r in txt):
+            yield Finding(
+                id="MTA_STS_AUSENTE",
+                title="MTA-STS não publicado",
+                category=self.category,
+                severity=Severity.LOW,
+                description=f"O domínio `{domain}` recebe e-mail (tem MX), mas não publica uma política MTA-STS.",
+                impact=(
+                    "Sem MTA-STS, a entrega de e-mail para o seu domínio pode ser rebaixada "
+                    "para uma conexão sem TLS por um atacante na rede (downgrade), expondo o "
+                    "conteúdo das mensagens. O MTA-STS obriga os remetentes a usar TLS válido."
+                ),
+                recommendation=(
+                    "Publique a política MTA-STS: o registro TXT `_mta-sts.<domínio>` "
+                    "(`v=STSv1; id=...`) e o arquivo `/.well-known/mta-sts.txt` em "
+                    "`mta-sts.<domínio>` com `mode: enforce`."
+                ),
+                references=(ref.RFC_MTA_STS,),
+            )
+
+    def _check_tls_rpt(self, resolver: dns.resolver.Resolver, domain: str) -> Iterable[Finding]:
+        txt = _txt_records(resolver, f"_smtp._tls.{domain}")
+        if txt is None:
+            return  # inconclusivo
+        if not any(r.lower().startswith("v=tlsrptv1") for r in txt):
+            yield Finding(
+                id="TLS_RPT_AUSENTE",
+                title="TLS-RPT não publicado",
+                category=self.category,
+                severity=Severity.INFO,
+                description=f"O domínio `{domain}` não publica TLS-RPT (relatórios de falha de TLS no e-mail).",
+                impact=(
+                    "Sem TLS-RPT você não recebe relatórios quando a entrega de e-mail falha "
+                    "em negociar TLS — perdendo visibilidade de tentativas de downgrade e de "
+                    "problemas de configuração no transporte de e-mail."
+                ),
+                recommendation=(
+                    "Publique um registro TXT em `_smtp._tls.<domínio>` no formato "
+                    "`v=TLSRPTv1; rua=mailto:...` para receber os relatórios."
+                ),
+                references=(ref.RFC_TLS_RPT,),
+            )
 
 
 def _is_ip(host: str) -> bool:

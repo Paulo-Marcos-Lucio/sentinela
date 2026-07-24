@@ -191,6 +191,27 @@ class SecurityHeadersChecker(Checker):
     def _check_csp(self, probe: Probe) -> Iterable[Finding]:
         value = probe.header("Content-Security-Policy")
         if value is None:
+            if probe.has_header("Content-Security-Policy-Report-Only"):
+                yield Finding(
+                    id="CSP_APENAS_REPORT_ONLY",
+                    title="CSP presente apenas em modo report-only",
+                    category=self.category,
+                    severity=Severity.LOW,
+                    description=(
+                        "Existe `Content-Security-Policy-Report-Only`, mas nenhuma CSP em modo de "
+                        "bloqueio (`Content-Security-Policy`)."
+                    ),
+                    impact=(
+                        "Em report-only a política apenas reporta violações — não bloqueia nada. "
+                        "Contra um XSS real, ela não oferece proteção alguma."
+                    ),
+                    recommendation=(
+                        "Após calibrar com os relatórios, promova a política para o cabeçalho "
+                        "`Content-Security-Policy` (modo de bloqueio)."
+                    ),
+                    references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
+                )
+                return
             yield Finding(
                 id="CSP_AUSENTE",
                 title="Content-Security-Policy ausente",
@@ -230,6 +251,65 @@ class SecurityHeadersChecker(Checker):
                     "para os scripts legítimos."
                 ),
                 references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
+            )
+
+        yield from self._check_csp_sources(value)
+
+    def _check_csp_sources(self, value: str) -> Iterable[Finding]:
+        """Análise profunda de diretivas (estilo CSP Evaluator): curinga em script-src,
+        object-src/base-uri ausentes — bypasses clássicos que passam despercebidos."""
+        directives = _parse_csp(value)
+        script = directives.get("script-src", directives.get("default-src"))
+        if script is not None:
+            curingas = sorted(
+                {t for t in script if t in ("*", "http:", "https:", "data:", "http://*", "https://*")}
+            )
+            if curingas:
+                yield Finding(
+                    id="CSP_WILDCARD_PERMISSIVO",
+                    title="CSP com origem curinga em script-src",
+                    category=self.category,
+                    severity=Severity.MEDIUM,
+                    description=f"A fonte de scripts da CSP inclui curinga(s): {', '.join(curingas)}.",
+                    evidence=_truncate(value),
+                    impact=(
+                        "Um curinga (`*`, `https:`, `data:`) em `script-src` permite carregar script "
+                        "de praticamente qualquer origem, esvaziando a proteção da CSP contra XSS."
+                    ),
+                    recommendation=(
+                        "Restrinja `script-src` a origens específicas (idealmente nonce/hash), "
+                        "removendo curingas e esquemas amplos."
+                    ),
+                    references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
+                )
+        default = directives.get("default-src", [])
+        if "object-src" not in directives and "'none'" not in default:
+            yield Finding(
+                id="CSP_SEM_OBJECT_SRC",
+                title="CSP sem object-src 'none'",
+                category=self.category,
+                severity=Severity.LOW,
+                description="A CSP não define `object-src 'none'` (nem um `default-src 'none'`).",
+                impact=(
+                    "Sem `object-src 'none'`, plugins/embeds (`<object>`, `<embed>`) podem ser "
+                    "injetados e usados como vetor de execução — um bypass clássico de CSP."
+                ),
+                recommendation="Adicione `object-src 'none'` à política.",
+                references=(ref.OWASP_CSP_CHEATSHEET,),
+            )
+        if "base-uri" not in directives:
+            yield Finding(
+                id="CSP_SEM_BASE_URI",
+                title="CSP sem base-uri",
+                category=self.category,
+                severity=Severity.LOW,
+                description="A CSP não define a diretiva `base-uri`.",
+                impact=(
+                    "Sem `base-uri`, uma injeção de `<base>` pode reescrever a resolução de URLs "
+                    "relativas da página, desviando scripts e recursos para um servidor do atacante."
+                ),
+                recommendation="Adicione `base-uri 'self'` (ou `'none'`) à política.",
+                references=(ref.OWASP_CSP_CHEATSHEET,),
             )
 
     def _check_frame_options(self, probe: Probe) -> Iterable[Finding]:
@@ -280,6 +360,16 @@ _MAX_AGE_RE = re.compile(r"max-age\s*=\s*(\d+)", re.IGNORECASE)
 def _parse_max_age(value: str) -> int | None:
     match = _MAX_AGE_RE.search(value)
     return int(match.group(1)) if match else None
+
+
+def _parse_csp(value: str) -> dict[str, list[str]]:
+    """CSP em ``{diretiva: [fontes]}`` (tudo minúsculo), para análise de diretivas."""
+    directives: dict[str, list[str]] = {}
+    for parte in value.split(";"):
+        tokens = parte.split()
+        if tokens:
+            directives[tokens[0].lower()] = [t.lower() for t in tokens[1:]]
+    return directives
 
 
 def _truncate(text: str, limit: int = 180) -> str:

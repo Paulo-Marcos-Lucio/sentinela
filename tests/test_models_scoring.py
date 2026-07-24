@@ -71,3 +71,21 @@ def test_score_piso_zero() -> None:
 
 def test_score_info_nao_penaliza() -> None:
     assert compute_score([_finding(Severity.INFO)]).value == 100
+
+
+def test_score_cert_quebrado_teta_em_f() -> None:
+    # Um único HIGH normal daria B (100-20=80); com falha de confiança TLS, teto em F.
+    s = compute_score([_finding(Severity.HIGH, "CERT_EXPIRADO")])
+    assert s.grade == "F"
+    assert s.value <= 44
+
+
+def test_score_alvo_inacessivel_nao_infla_a_nota() -> None:
+    # Incapacidade de avaliar NÃO pode virar nota boa (era o bug de inversão).
+    s = compute_score([_finding(Severity.HIGH, "ALVO_INACESSIVEL")])
+    assert s.grade == "F"
+    assert "incompleta" in s.summary.lower()
+
+
+def test_score_hostname_invalido_teta_em_f() -> None:
+    assert compute_score([_finding(Severity.HIGH, "CERT_HOSTNAME_INVALIDO")]).grade == "F"

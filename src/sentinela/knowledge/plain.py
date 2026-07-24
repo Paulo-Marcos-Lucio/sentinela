@@ -31,6 +31,23 @@ _PLAIN: dict[str, str] = {
         "A lista de fornecedores existe, mas tem uma brecha que na prática deixa entrar 'qualquer "
         "um' — o que anula boa parte da proteção contra scripts maliciosos."
     ),
+    "CSP_APENAS_REPORT_ONLY": (
+        "A lista de fornecedores existe, mas está em modo 'só anota quem furou a regra', sem barrar "
+        "ninguém — como um segurança que apenas fotografa o invasor e o deixa entrar. Falta ligar o "
+        "modo que efetivamente bloqueia."
+    ),
+    "CSP_WILDCARD_PERMISSIVO": (
+        "A lista de fornecedores de scripts tem um 'aceita qualquer um' no meio (um curinga). Uma "
+        "regra que deixa todo mundo entrar é quase o mesmo que não ter regra nenhuma."
+    ),
+    "CSP_SEM_OBJECT_SRC": (
+        "Falta fechar a porta dos 'plugins antigos' (object/embed). É uma entrada lateral esquecida "
+        "aberta que atacantes usam pra driblar o resto da proteção. Fecha-se com uma linha só."
+    ),
+    "CSP_SEM_BASE_URI": (
+        "Falta travar o 'endereço-base' da página. Sem essa trava, um atacante consegue reescrever "
+        "para onde os links e scripts apontam — como trocar as placas de direção dentro da sua loja."
+    ),
     "CLICKJACKING_SEM_PROTECAO": (
         "Sem esta trava, um golpista pode colocar o seu site dentro de uma moldura invisível e "
         "enganar o visitante a clicar em coisas que ele não vê — como sobrepor um vidro falso sobre "
@@ -93,6 +110,38 @@ _PLAIN: dict[str, str] = {
         "Sem esta marca, a 'pulseira' acompanha o usuário até quando ele clica num link de outro "
         "site — o que abre porta pra golpes (CSRF) em que um site malicioso age em nome do usuário "
         "sem ele perceber."
+    ),
+    "COOKIE_SAMESITE_NONE_INSEGURO": (
+        "A 'pulseira' foi liberada pra funcionar em outros sites, mas sem a exigência de trafegar "
+        "só pelo caminho seguro. É como distribuir a pulseira na rua sem lacre: os navegadores "
+        "modernos a recusam e, sem o lacre, ela pode ser copiada no meio do caminho."
+    ),
+    "COOKIE_PREFIXO_INVALIDO": (
+        "O cookie usa um 'selo de garantia' no nome (__Host-/__Secure-) que promete regras "
+        "extras de segurança — mas não cumpre essas regras. O navegador percebe a inconsistência "
+        "e simplesmente joga o cookie fora: a proteção que você achava que tinha não existe."
+    ),
+    # --- Conteúdo da página (a mercadoria exposta na vitrine) ---
+    "CONTEUDO_MISTO": (
+        "A loja tem porta blindada (HTTPS), mas parte da mercadoria chega por um caminho sem "
+        "cadeado (HTTP) — como receber encomendas por uma porta dos fundos destrancada. Alguém no "
+        "caminho pode trocar ou bisbilhotar esses itens, e o navegador chega a bloqueá-los."
+    ),
+    "SRI_AUSENTE": (
+        "Sua página usa scripts entregues por um fornecedor externo (um CDN) sem conferir o 'lacre "
+        "de autenticidade' de cada entrega. Se esse fornecedor for invadido, ele passa a entregar "
+        "código malicioso e o seu site o executa confiando cegamente — como aceitar um pacote sem "
+        "verificar se o lacre foi violado."
+    ),
+    "FORM_ACTION_INSEGURA": (
+        "O formulário da página envia o que o visitante digita por um caminho sem cadeado (HTTP). "
+        "Tudo — inclusive login e senha — viaja num cartão-postal aberto que qualquer um no caminho "
+        "consegue ler."
+    ),
+    "SENHA_SEM_HTTPS": (
+        "A página que pede SENHA está sem cadeado nenhum (HTTP puro). A senha do cliente viaja em "
+        "texto aberto pela rede — é gritar a senha em voz alta num saguão cheio. É das falhas mais "
+        "sérias e simples de corrigir."
     ),
     # --- CORS (quem pode pegar emprestada a chave da loja) ---
     "CORS_REFLEXAO_COM_CREDENCIAIS": (
@@ -178,6 +227,15 @@ _PLAIN: dict[str, str] = {
         "aposentadas — como aceitar uma senha que todo mundo sabe que é insegura. Deixe só as "
         "versões modernas."
     ),
+    "TLS_SEM_PFS": (
+        "O cadeado usa um tipo de chave que, se um dia for roubada, permite abrir TODAS as "
+        "conversas antigas gravadas. Com 'forward secrecy' (cifras ECDHE/DHE) cada conversa tem "
+        "uma chave descartável, então um vazamento futuro não expõe o passado."
+    ),
+    "TLS_13_AUSENTE": (
+        "O site usa a versão 1.2 do 'idioma seguro' (TLS), que é aceitável — mas a 1.3 é mais "
+        "rápida e enxuga cifras frágeis. É um ajuste de aperfeiçoamento, não uma falha."
+    ),
     # --- DNS / e-mail (a caixa de correio da sua marca) ---
     "SPF_AUSENTE": (
         "Não existe uma lista de 'quem pode mandar e-mail em nome do seu domínio'. Sem ela, qualquer "
@@ -204,10 +262,54 @@ _PLAIN: dict[str, str] = {
         "As respostas de DNS do seu domínio não são assinadas, então podem ser forjadas pra "
         "redirecionar visitantes a um site falso — como adulterar a placa de endereço na esquina."
     ),
+    "MTA_STS_AUSENTE": (
+        "Sua caixa de correio aceita entregas mesmo por um carteiro sem lacre. Um golpista na rede "
+        "pode forçar essa entrega 'sem lacre' e ler as cartas (e-mails) no caminho. O MTA-STS é a "
+        "placa que exige: 'só aceito carteiro com lacre verificado'."
+    ),
+    "TLS_RPT_AUSENTE": (
+        "Você não pediu para receber o 'aviso de entrega com problema' quando um e-mail destinado "
+        "à sua marca falha em usar o caminho seguro. Sem esse aviso, você fica sem enxergar "
+        "tentativas de golpe ou erros de configuração no transporte do e-mail."
+    ),
     "DNS_HOSPEDAGEM_GERENCIADA": (
         "Seu site está numa hospedagem gerenciada (tipo GitHub Pages): o DNS e o e-mail são do "
         "provedor, não seus, e não são a sua responsabilidade. Pra avaliar e-mail/DNS, rode o "
         "diagnóstico contra o seu domínio próprio."
+    ),
+    # --- Recon passiva de arquivos públicos ---
+    "ROBOTS_CAMINHOS_SENSIVEIS": (
+        "O arquivo público que orienta os buscadores (robots.txt) lista, de bandeja, os endereços "
+        "das áreas 'secretas' (admin, backup, config). É como pendurar na porta a lista de onde "
+        "estão o cofre e a sala dos fundos: pedir para o buscador não olhar não impede um ladrão "
+        "de ir direto ao ponto. O robots.txt não tranca nada — só indica."
+    ),
+    # --- Superfície de ataque / subdomínios (as filiais e portas laterais da marca) ---
+    "SUPERFICIE_SUBDOMINIOS": (
+        "Descobrimos, por registros públicos de certificados, quantas 'filiais' (subdomínios) o seu "
+        "domínio tem. Cada uma é uma porta a ser vigiada — e quase sempre há filiais esquecidas "
+        "(ambiente de teste, painel antigo) que ninguém mais olha. Só se protege o que se sabe que existe."
+    ),
+    "SUBDOMAIN_TAKEOVER": (
+        "Uma placa da SUA marca (um subdomínio) continua apontando para uma loja que você fechou e "
+        "devolveu (um serviço de terceiro desativado). Um golpista aluga aquela loja vazia e passa a "
+        "atender os seus clientes SOB O SEU NOME — página falsa convincente, roubo de dados. É das "
+        "falhas externas mais graves; a correção é remover a placa (o registro DNS) órfã."
+    ),
+    "SUBDOMAIN_TAKEOVER_POSSIVEL": (
+        "Uma placa da sua marca aponta para um serviço de terceiro que não respondeu — pode ser "
+        "uma placa esquecida (CNAME órfão). Não é um alarme, é um lembrete: confira se ainda usa "
+        "e, se não, remova a placa (o registro DNS) para não virar risco no futuro."
+    ),
+    "CACHE_SENSIVEL_SEM_NOSTORE": (
+        "A página que pede senha não avisa o navegador para 'não guardar isto'. Sem esse aviso, o "
+        "que o cliente digitou pode ficar no cache — como deixar o comprovante com dados na "
+        "impressora compartilhada. Um cabeçalho resolve."
+    ),
+    "ALVO_INACESSIVEL": (
+        "Não conseguimos nem abrir a porta da loja (o site não respondeu, ou o crachá de identidade "
+        "TLS é inválido). Por isso a vistoria ficou incompleta e a nota reflete essa impossibilidade "
+        "de avaliar — não é um veredito de que está tudo bem."
     ),
     # --- Higiene / processo ---
     "SECURITY_TXT_AUSENTE": (

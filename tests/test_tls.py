@@ -120,3 +120,30 @@ def test_ip_target_not_compared_to_dns_san() -> None:
     # cert só com DNS SAN, alvo IP → não flagra (não compara IP contra nome DNS).
     cert = _cert("example.com")
     assert {f.id for f in checker._check_hostname(cert, "203.0.113.7")} == set()
+
+
+# --- Profundidade TLS (#8): forward secrecy + suporte a TLS 1.3 ---
+def test_tls_hardening_sem_pfs_e_sem_13() -> None:
+    # RSA estático em 1.2: sem PFS; e negociar 1.2 com cliente 1.3-capaz => sem 1.3.
+    ids = {f.id for f in checker._check_tls_hardening("TLSv1.2", "AES128-GCM-SHA256")}
+    assert ids == {"TLS_13_AUSENTE", "TLS_SEM_PFS"}
+
+
+def test_tls_hardening_ecdhe_tem_pfs() -> None:
+    ids = {f.id for f in checker._check_tls_hardening("TLSv1.2", "ECDHE-RSA-AES128-GCM-SHA256")}
+    assert "TLS_SEM_PFS" not in ids  # ECDHE tem forward secrecy
+    assert "TLS_13_AUSENTE" in ids
+
+
+def test_tls_hardening_dhe_tem_pfs() -> None:
+    # DHE (não-ECDHE) TAMBÉM tem PFS — o critério ingênuo "not ECDHE" geraria FP aqui.
+    ids = {f.id for f in checker._check_tls_hardening("TLSv1.2", "DHE-RSA-AES128-GCM-SHA256")}
+    assert "TLS_SEM_PFS" not in ids
+
+
+def test_tls_hardening_13_negociado_nao_gera_achado() -> None:
+    assert list(checker._check_tls_hardening("TLSv1.3", "TLS_AES_256_GCM_SHA384")) == []
+
+
+def test_tls_hardening_inconclusivo_nao_gera_achado() -> None:
+    assert list(checker._check_tls_hardening(None, None)) == []
