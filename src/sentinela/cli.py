@@ -65,6 +65,16 @@ class NivelFalha(str, Enum):
     critica = "critica"
 
 
+class Perfil(str, Enum):
+    completo = "completo"
+    rapido = "rapido"
+
+
+# Modo rápido: pula as checagens que fazem rede extra além da coleta primária
+# (handshakes TLS, consultas DNS, e o fetch do robots.txt) para uma triagem ágil.
+_PERFIL_RAPIDO_SKIP = frozenset({"tls", "dns-email", "well-known"})
+
+
 _EXT = {Formato.markdown: "md", Formato.html: "html", Formato.json: "json", Formato.sarif: "sarif"}
 _RENDERERS = {
     Formato.markdown: render_markdown,
@@ -124,6 +134,14 @@ def scan(
         list[str] | None,
         typer.Option("--somente", "--only", help="Roda somente estes IDs. Repetível."),
     ] = None,
+    perfil: Annotated[
+        Perfil,
+        typer.Option(
+            "--perfil",
+            "--profile",
+            help="`completo` (padrão) roda tudo; `rapido` pula TLS, DNS/e-mail e robots.txt para uma triagem ágil.",
+        ),
+    ] = Perfil.completo,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="User-Agent customizado.")] = None,
     falhar_em: Annotated[
         NivelFalha,
@@ -151,13 +169,17 @@ def scan(
     if sem_verificacao_tls:
         err_console.print("[yellow]Aviso:[/] verificação de certificado TLS desabilitada.")
 
+    skip = set(pular or ())
+    if perfil is Perfil.rapido:
+        skip |= _PERFIL_RAPIDO_SKIP
+
     config = ScanConfig(
         intrusive=autorizado,
         discover=descobrir,
         timeout=timeout,
         user_agent=user_agent or USER_AGENT,
         verify_tls=not sem_verificacao_tls,
-        skip=frozenset(pular or ()),
+        skip=frozenset(skip),
         only=frozenset(somente or ()),
     )
 

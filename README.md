@@ -103,6 +103,7 @@ Principais opções do `scan`:
 | `--falhar-em` | `nenhum`/`baixa`/`media`/`alta`/`critica` — código de saída 1 para CI. |
 | `--timeout` | Timeout por requisição (padrão 15s). |
 | `--pular` / `--somente` | Filtra quais checagens rodam (por ID). |
+| `--perfil` | `completo` (padrão) roda tudo; `rapido` pula TLS, DNS/e-mail e robots.txt (triagem ágil). |
 
 📄 **Veja um relatório real de exemplo:** [`docs/exemplo-relatorio.md`](docs/exemplo-relatorio.md)
 
@@ -156,7 +157,7 @@ Use com responsabilidade. Veja [`SECURITY.md`](SECURITY.md) para divulgação re
 - [x] Verificação de Subresource Integrity (SRI) em scripts de terceiros
 - [x] Alerta de *dangling CNAME* / subdomain takeover (descoberta via Certificate Transparency, opt-in `--descobrir`)
 - [x] Exportação para **SARIF 2.1.0** (`-f sarif`) — ingestável pela aba *Security* do GitHub
-- [ ] Perfis de varredura (`--perfil rapido|completo`)
+- [x] Perfis de varredura (`--perfil completo|rapido`)
 
 ---
 
