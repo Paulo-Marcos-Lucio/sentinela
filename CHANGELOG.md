@@ -33,6 +33,8 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Nota de higiene com teto em **F** quando o certificado está quebrado ou o alvo é inalcançável.
 - DNS distingue "consulta falhou" (inconclusivo) de "ausência real", evitando falso-positivo
   de SPF/DMARC sob resolver instável.
+- Perfis de varredura (`--perfil completo|rapido`): o modo `rapido` pula as checagens de rede
+  extra (TLS, DNS/e-mail e robots.txt) para uma triagem ágil.
 
 ### Planejado
 - Detecção de bibliotecas front-end desatualizadas (A03 Supply Chain)
