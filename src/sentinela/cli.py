@@ -17,7 +17,13 @@ from sentinela.core.http import USER_AGENT
 from sentinela.core.models import ScanResult, Severity
 from sentinela.core.registry import all_check_metadata
 from sentinela.core.target import parse_target
-from sentinela.report import render_console, render_html, render_json, render_markdown
+from sentinela.report import (
+    render_console,
+    render_html,
+    render_json,
+    render_markdown,
+    render_sarif,
+)
 from sentinela.version import __version__
 
 
@@ -48,6 +54,7 @@ class Formato(str, Enum):
     markdown = "markdown"
     html = "html"
     json = "json"
+    sarif = "sarif"
 
 
 class NivelFalha(str, Enum):
@@ -58,11 +65,12 @@ class NivelFalha(str, Enum):
     critica = "critica"
 
 
-_EXT = {Formato.markdown: "md", Formato.html: "html", Formato.json: "json"}
+_EXT = {Formato.markdown: "md", Formato.html: "html", Formato.json: "json", Formato.sarif: "sarif"}
 _RENDERERS = {
     Formato.markdown: render_markdown,
     Formato.html: render_html,
     Formato.json: render_json,
+    Formato.sarif: render_sarif,
 }
 _FALHA_SEV = {
     NivelFalha.baixa: Severity.LOW,

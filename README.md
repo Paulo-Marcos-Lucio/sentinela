@@ -97,7 +97,7 @@ Principais opções do `scan`:
 
 | Opção | Descrição |
 | --- | --- |
-| `-f, --formato` | `console` (padrão), `markdown`, `html`, `json`. Repetível. |
+| `-f, --formato` | `console` (padrão), `markdown`, `html`, `json`, `sarif`. Repetível. |
 | `-o, --saida` | Arquivo de saída para um formato de arquivo. |
 | `--autorizado` | Ativa as checagens **intrusivas**. Só use com autorização. |
 | `--falhar-em` | `nenhum`/`baixa`/`media`/`alta`/`critica` — código de saída 1 para CI. |
@@ -155,7 +155,7 @@ Use com responsabilidade. Veja [`SECURITY.md`](SECURITY.md) para divulgação re
 - [ ] Detecção de bibliotecas front-end desatualizadas (fingerprint) — A03 Supply Chain
 - [x] Verificação de Subresource Integrity (SRI) em scripts de terceiros
 - [x] Alerta de *dangling CNAME* / subdomain takeover (descoberta via Certificate Transparency, opt-in `--descobrir`)
-- [ ] Exportação para SARIF (integração com o GitHub Security)
+- [x] Exportação para **SARIF 2.1.0** (`-f sarif`) — ingestável pela aba *Security* do GitHub
 - [ ] Perfis de varredura (`--perfil rapido|completo`)
 
 ---

@@ -25,6 +25,9 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - DNS/e-mail: checagem de **MTA-STS** e **TLS-RPT** (quando há registro MX).
 - Execução paralela do motor e das sondas (pré-coleta, checagens e handshakes de TLS) e
   seção "Plano de ação — comece por aqui" no relatório.
+- Exportação **SARIF 2.1.0** (`-f sarif`): formato *machine-readable* padrão, com
+  `security-severity` e taxonomia OWASP/CWE por achado; ingestável por pipelines e pela aba
+  *Security* do GitHub (cada achado é localizado pela URL do alvo).
 
 ### Corrigido
 - Nota de higiene com teto em **F** quando o certificado está quebrado ou o alvo é inalcançável.
@@ -33,7 +36,7 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ### Planejado
 - Detecção de bibliotecas front-end desatualizadas (A03 Supply Chain)
-- Exportação para SARIF
+- Perfis de varredura (`--perfil rapido|completo`)
 
 ## [0.1.0] — 2026-07-21
 
