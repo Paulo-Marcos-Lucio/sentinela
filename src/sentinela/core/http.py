@@ -92,13 +92,17 @@ class HttpClient:
         *,
         headers: dict[str, str] | None = None,
         follow_redirects: bool = True,
+        max_body_bytes: int | None = None,
     ) -> Probe:
         """Executa uma requisição e devolve um :class:`Probe`, nunca uma exceção.
 
         Redirecionamentos são seguidos manualmente (até ``_MAX_REDIRECTS``), com
         cada destino validado contra a guarda anti-SSRF. Erros de rede, TLS ou de
-        URL viram um ``Probe`` com ``error`` preenchido.
+        URL viram um ``Probe`` com ``error`` preenchido. ``max_body_bytes`` permite
+        a uma checagem específica (ex.: análise de HTML) ler mais do corpo que o
+        teto padrão, sem afrouxar o limite das demais requisições.
         """
+        cap = self.max_body_bytes if max_body_bytes is None else max_body_bytes
         chain: list[str] = []
         current = url
         status = 0
@@ -129,7 +133,7 @@ class HttpClient:
                         current = next_url
                         continue
 
-                    body_snippet = self._read_capped(response)
+                    body_snippet = self._read_capped(response, cap)
                     elapsed_ms = _safe_elapsed(response)
                     break
         except (httpx.HTTPError, httpx.InvalidURL, OSError) as exc:
@@ -146,19 +150,19 @@ class HttpClient:
             elapsed_ms=elapsed_ms,
         )
 
-    def _read_capped(self, response: httpx.Response) -> str:
-        """Lê no máximo ``max_body_bytes`` do corpo, interrompendo o download."""
+    def _read_capped(self, response: httpx.Response, cap: int) -> str:
+        """Lê no máximo ``cap`` bytes do corpo, interrompendo o download."""
         chunks: list[bytes] = []
         total = 0
         try:
             for chunk in response.iter_bytes():
                 chunks.append(chunk)
                 total += len(chunk)
-                if total >= self.max_body_bytes:
+                if total >= cap:
                     break
         except (httpx.HTTPError, OSError):
             return ""
-        raw = b"".join(chunks)[: self.max_body_bytes]
+        raw = b"".join(chunks)[:cap]
         return raw.decode(response.encoding or "utf-8", "replace")
 
     def get(self, url: str, **kwargs: object) -> Probe:

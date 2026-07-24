@@ -91,6 +91,14 @@ def scan(
             help="ATIVA checagens intrusivas. Declare somente com autorização por escrito do alvo.",
         ),
     ] = False,
+    descobrir: Annotated[
+        bool,
+        typer.Option(
+            "--descobrir",
+            "--discover",
+            help="Descobre subdomínios via Certificate Transparency (crt.sh) e checa subdomain takeover. Passivo, porém mais lento (consulta serviço externo).",
+        ),
+    ] = False,
     timeout: Annotated[float, typer.Option(help="Timeout por requisição, em segundos.")] = 8.0,
     sem_verificacao_tls: Annotated[
         bool,
@@ -137,6 +145,7 @@ def scan(
 
     config = ScanConfig(
         intrusive=autorizado,
+        discover=descobrir,
         timeout=timeout,
         user_agent=user_agent or USER_AGENT,
         verify_tls=not sem_verificacao_tls,

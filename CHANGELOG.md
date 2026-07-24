@@ -7,9 +7,32 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **Descoberta de superfície de ataque** (`--descobrir`): enumeração de subdomínios via
+  **Certificate Transparency** (Cert Spotter como fonte primária, crt.sh como *fallback*) e
+  detecção de **subdomain takeover** — CNAME órfão apontando para serviço não reivindicado
+  (S3, GitHub Pages, Heroku, Azure e outros), confirmado por NXDOMAIN ou assinatura no corpo.
+- Checagem de **conteúdo da página** (`content`): conteúdo misto (*mixed content*), ausência
+  de **Subresource Integrity (SRI)** em recursos de terceiros, formulário com `action`
+  insegura, campo de senha servido sem HTTPS e página sensível sem `Cache-Control: no-store`.
+- Checagem de **arquivos públicos** (`well-known`): leitura de `robots.txt` (RFC 9309) para
+  sinalizar caminhos sensíveis expostos por convenção.
+- **Análise profunda de CSP** (estilo CSP Evaluator): curinga em `script-src`, ausência de
+  `object-src 'none'` e de `base-uri`, e política apenas em `report-only`.
+- **Endurecimento de TLS**: sinalização de ausência de TLS 1.3 e de cifras sem
+  Perfect Forward Secrecy, além do sondador de protocolo legado (TLS 1.0/1.1).
+- Cookies: `SameSite=None` inseguro e validação dos prefixos `__Host-`/`__Secure-`.
+- DNS/e-mail: checagem de **MTA-STS** e **TLS-RPT** (quando há registro MX).
+- Execução paralela do motor e das sondas (pré-coleta, checagens e handshakes de TLS) e
+  seção "Plano de ação — comece por aqui" no relatório.
+
+### Corrigido
+- Nota de higiene com teto em **F** quando o certificado está quebrado ou o alvo é inalcançável.
+- DNS distingue "consulta falhou" (inconclusivo) de "ausência real", evitando falso-positivo
+  de SPF/DMARC sob resolver instável.
+
 ### Planejado
 - Detecção de bibliotecas front-end desatualizadas (A03 Supply Chain)
-- Verificação de Subresource Integrity (SRI)
 - Exportação para SARIF
 
 ## [0.1.0] — 2026-07-21

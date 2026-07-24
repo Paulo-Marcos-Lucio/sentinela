@@ -26,6 +26,8 @@ class CorsChecker(Checker):
     intrusive = False
 
     def run(self, ctx: ScanContext) -> Iterable[Finding]:
+        if not ctx.primary.ok:
+            return  # host inalcançável: não gastar outro timeout sondando o mesmo alvo
         probe = ctx.client.get(ctx.target.url, headers={"Origin": _PROBE_ORIGIN})
         if not probe.ok:
             return

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from sentinela.checks.base import Checker
+from sentinela.checks.content import ContentChecker
 from sentinela.checks.cookies import CookiesChecker
 from sentinela.checks.cors import CorsChecker
 from sentinela.checks.dns_email import DnsEmailChecker
@@ -10,8 +11,10 @@ from sentinela.checks.exposure import ExposureChecker
 from sentinela.checks.http_methods import HttpMethodsChecker
 from sentinela.checks.info_disclosure import InfoDisclosureChecker
 from sentinela.checks.security_headers import SecurityHeadersChecker
+from sentinela.checks.subdomain_takeover import SubdomainTakeoverChecker
 from sentinela.checks.tls import TlsChecker
 from sentinela.checks.transport import TransportChecker
+from sentinela.checks.well_known import WellKnownChecker
 from sentinela.core.config import ScanConfig
 
 # Ordem de declaração = ordem de execução (e de exibição no log).
@@ -23,7 +26,10 @@ ALL_CHECKERS: tuple[type[Checker], ...] = (
     CorsChecker,
     HttpMethodsChecker,
     InfoDisclosureChecker,
+    ContentChecker,
+    WellKnownChecker,
     DnsEmailChecker,
+    SubdomainTakeoverChecker,
     ExposureChecker,
 )
 

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 # Rótulos OWASP Top 10:2025 (owasp.org/Top10/2025/)
 A01 = "A01:2025 Broken Access Control"
 A02 = "A02:2025 Security Misconfiguration"
+A03 = "A03:2025 Software Supply Chain Failures"
 A04 = "A04:2025 Cryptographic Failures"
 A07 = "A07:2025 Authentication Failures"
 
@@ -35,6 +36,10 @@ _TAGS: dict[str, Tag] = {
     "COOP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_DIRETIVA_INSEGURA": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_APENAS_REPORT_ONLY": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_WILDCARD_PERMISSIVO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_SEM_OBJECT_SRC": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_SEM_BASE_URI": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CLICKJACKING_SEM_PROTECAO": Tag(A02, "CWE-1021", "Improper Restriction of Rendered UI Layers"),
     "XXSS_PROTECTION_LEGADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     # HSTS / transporte -> A04 Cryptographic Failures
@@ -46,6 +51,15 @@ _TAGS: dict[str, Tag] = {
     "COOKIE_SEM_HTTPONLY": Tag(A07, "CWE-1004", "Sensitive Cookie Without 'HttpOnly' Flag"),
     "COOKIE_SEM_SECURE": Tag(A04, "CWE-614", "Sensitive Cookie Without 'Secure' Attribute"),
     "COOKIE_SEM_SAMESITE": Tag(A01, "CWE-352", "Cross-Site Request Forgery (CSRF)"),
+    "COOKIE_SAMESITE_NONE_INSEGURO": Tag(
+        A01, "CWE-1275", "Sensitive Cookie with Improper SameSite Attribute"
+    ),
+    "COOKIE_PREFIXO_INVALIDO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    # Conteúdo HTML / integridade da página
+    "CONTEUDO_MISTO": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
+    "SRI_AUSENTE": Tag(A03, "CWE-353", "Missing Support for Integrity Check"),
+    "FORM_ACTION_INSEGURA": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
+    "SENHA_SEM_HTTPS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     # CORS
     "CORS_REFLEXAO_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
     "CORS_CURINGA_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
@@ -72,6 +86,8 @@ _TAGS: dict[str, Tag] = {
     "CERT_ASSINATURA_FRACA": Tag(A04, "CWE-327", "Use of a Broken or Risky Cryptographic Algorithm"),
     "CERT_NAO_CONFIAVEL": Tag(A04, "CWE-295", "Improper Certificate Validation"),
     "TLS_PROTOCOLO_LEGADO": Tag(A04, "CWE-327", "Use of a Broken or Risky Cryptographic Algorithm"),
+    "TLS_SEM_PFS": Tag(A04, "CWE-326", "Inadequate Encryption Strength"),
+    "TLS_13_AUSENTE": Tag(A04, None, None),
     # DNS / e-mail
     "SPF_AUSENTE": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
     "SPF_PERMISSIVO": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
@@ -80,6 +96,20 @@ _TAGS: dict[str, Tag] = {
     # CAA é hardening de DNS (restringe quais CAs podem emitir); sem CWE canônico bom.
     "CAA_AUSENTE": Tag(A02, None, None),
     "DNSSEC_AUSENTE": Tag(A02, "CWE-345", "Insufficient Verification of Data Authenticity"),
+    "MTA_STS_AUSENTE": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
+    "TLS_RPT_AUSENTE": Tag(None, None, None),
+    # Recon passiva de arquivos públicos
+    "ROBOTS_CAMINHOS_SENSIVEIS": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    # Superfície de ataque / subdomínios
+    "SUPERFICIE_SUBDOMINIOS": Tag(None, None, None),
+    "SUBDOMAIN_TAKEOVER": Tag(A02, "CWE-284", "Improper Access Control"),
+    "SUBDOMAIN_TAKEOVER_POSSIVEL": Tag(A02, "CWE-284", "Improper Access Control"),
+    # Conteúdo — cache de página sensível
+    "CACHE_SENSIVEL_SEM_NOSTORE": Tag(
+        A02, "CWE-525", "Use of Web Browser Cache Containing Sensitive Information"
+    ),
+    # Meta-achado: alvo inacessível (teta a nota)
+    "ALVO_INACESSIVEL": Tag(None, None, None),
     # Higiene / processo (sem OWASP direto)
     "SECURITY_TXT_AUSENTE": Tag(None, None, None),
 }

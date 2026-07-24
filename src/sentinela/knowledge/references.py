@@ -33,6 +33,8 @@ MDN_COEP = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Emb
 MDN_CORP = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Resource-Policy"
 MDN_SETCOOKIE = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Set-Cookie"
 MDN_CORS = "https://developer.mozilla.org/docs/Web/HTTP/CORS"
+MDN_SRI = "https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity"
+MDN_MIXED_CONTENT = "https://developer.mozilla.org/docs/Web/Security/Mixed_content"
 
 # Mozilla / TLS
 MOZILLA_TLS = "https://wiki.mozilla.org/Security/Server_Side_TLS"
@@ -49,7 +51,20 @@ RFC_SPF = "https://www.rfc-editor.org/rfc/rfc7208"
 RFC_DMARC = "https://www.rfc-editor.org/rfc/rfc7489"
 RFC_CAA = "https://www.rfc-editor.org/rfc/rfc8659"
 RFC_DNSSEC = "https://www.rfc-editor.org/rfc/rfc9364"
+RFC_MTA_STS = "https://www.rfc-editor.org/rfc/rfc8461"
+RFC_TLS_RPT = "https://www.rfc-editor.org/rfc/rfc8460"
 DMARC_ORG = "https://dmarc.org/overview/"
+
+# Web / robôs
+RFC_ROBOTS = "https://www.rfc-editor.org/rfc/rfc9309"
+
+# Certificate Transparency / superfície de ataque
+CRT_SH = "https://crt.sh/"
+OWASP_WSTG_SUBDOMAIN = (
+    "https://owasp.org/www-project-web-security-testing-guide/latest/"
+    "4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/"
+    "10-Test_for_Subdomain_Takeover"
+)
 
 # Brasil / regulatório
 LGPD = "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"

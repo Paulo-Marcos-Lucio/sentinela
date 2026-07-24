@@ -17,6 +17,8 @@ class _Cookie:
     secure: bool
     http_only: bool
     same_site: str | None
+    path: str | None
+    domain: str | None
 
 
 # Nomes que sugerem cookie de sessão/autenticação — onde a falta de HttpOnly é séria
@@ -52,15 +54,37 @@ def _parse_cookie(raw: str) -> _Cookie:
     name = parts[0].split("=", 1)[0].strip() if parts else ""
     flags = {p.lower() for p in parts[1:]}
     same_site = None
+    path = None
+    domain = None
     for p in parts[1:]:
-        if p.lower().startswith("samesite="):
+        low = p.lower()
+        if low.startswith("samesite="):
             same_site = p.split("=", 1)[1].strip()
+        elif low.startswith("path="):
+            path = p.split("=", 1)[1].strip()
+        elif low.startswith("domain="):
+            domain = p.split("=", 1)[1].strip()
     return _Cookie(
         name=name or "(sem nome)",
         secure="secure" in flags,
         http_only="httponly" in flags,
         same_site=same_site,
+        path=path,
+        domain=domain,
     )
+
+
+def _prefixo_violado(c: _Cookie) -> bool:
+    """Verdadeiro se o nome usa prefixo de segurança sem cumprir os requisitos.
+
+    ``__Secure-`` exige ``Secure``. ``__Host-`` exige ``Secure`` + ``Path=/`` e a
+    AUSÊNCIA de ``Domain``. Requisitos não cumpridos → o navegador ignora o cookie.
+    """
+    if c.name.startswith("__Host-"):
+        return not (c.secure and c.path == "/" and c.domain is None)
+    if c.name.startswith("__Secure-"):
+        return not c.secure
+    return False
 
 
 class CookiesChecker(Checker):
@@ -147,6 +171,47 @@ class CookiesChecker(Checker):
                 recommendation=(
                     "Defina `SameSite=Lax` (padrão seguro) ou `Strict`; use `None` "
                     "apenas em conjunto com `Secure` quando o cross-site for necessário."
+                ),
+                references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
+            )
+
+        samesite_none_insecure = [
+            c.name for c in cookies if c.same_site and c.same_site.lower() == "none" and not c.secure
+        ]
+        if samesite_none_insecure:
+            yield Finding(
+                id="COOKIE_SAMESITE_NONE_INSEGURO",
+                title="Cookie com SameSite=None sem flag Secure",
+                category=self.category,
+                severity=Severity.MEDIUM,
+                description=f"Cookies com `SameSite=None` mas sem `Secure`: {', '.join(samesite_none_insecure)}.",
+                evidence=", ".join(samesite_none_insecure),
+                impact=(
+                    "`SameSite=None` libera o envio do cookie em requisições cross-site e "
+                    "EXIGE a flag `Secure`. Sem ela, o cookie pode trafegar por HTTP (capturável "
+                    "na rede) e os navegadores modernos o rejeitam — quebrando a sessão."
+                ),
+                recommendation="Sempre combine `SameSite=None` com `Secure` (ou prefira `Lax`/`Strict`).",
+                references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
+            )
+
+        prefixo_invalido = [c.name for c in cookies if _prefixo_violado(c)]
+        if prefixo_invalido:
+            yield Finding(
+                id="COOKIE_PREFIXO_INVALIDO",
+                title="Cookie com prefixo __Host-/__Secure- mal configurado",
+                category=self.category,
+                severity=Severity.LOW,
+                description=f"Cookies com prefixo de segurança sem os requisitos: {', '.join(prefixo_invalido)}.",
+                evidence=", ".join(prefixo_invalido),
+                impact=(
+                    "Os prefixos `__Secure-`/`__Host-` prometem garantias ao navegador (Secure; "
+                    "e, no `__Host-`, escopo travado em `Path=/` sem `Domain`). Se os requisitos "
+                    "não são cumpridos, o navegador IGNORA o cookie — a proteção pretendida não existe."
+                ),
+                recommendation=(
+                    "Para `__Secure-`, envie a flag `Secure`. Para `__Host-`, envie `Secure`, "
+                    "`Path=/` e NÃO defina `Domain`."
                 ),
                 references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
             )

@@ -9,6 +9,7 @@ de assinatura obsoleto. Tudo defensivo: qualquer erro inesperado resulta em
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import socket
 import ssl
@@ -43,15 +44,19 @@ class TlsChecker(Checker):
         # As conexões TLS são independentes → em paralelo, evitando um host lento
         # transformar 4×timeout em ~40s (o que travaria uma demo).
         is_ip = _is_ip(host)
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            cert_future = pool.submit(_fetch_certificate, host, port)
+        # Honra o --timeout do operador (agilidade de demo) mantendo o teto de 6s por handshake.
+        timeout = min(ctx.config.timeout, _HANDSHAKE_TIMEOUT)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            cert_future = pool.submit(_fetch_certificate, host, port, timeout)
             # Alvo IP puro: a validação de cadeia por hostname não se aplica (o navegador
             # casaria contra IP SAN); a checagem de hostname abaixo já cobre o IP SAN.
-            trust_future = None if is_ip else pool.submit(_trust_error, host, port)
-            legacy_future = pool.submit(_accepts_legacy_tls, host, port)
+            trust_future = None if is_ip else pool.submit(_trust_error, host, port, timeout)
+            legacy_future = pool.submit(_accepts_legacy_tls, host, port, timeout)
+            caps_future = pool.submit(_tls_capabilities, host, port, timeout)
             der = cert_future.result()
             trust_error = trust_future.result() if trust_future is not None else None
             legados = legacy_future.result()
+            tls_version, tls_cipher = caps_future.result()
 
         if der is None:
             return  # sem endpoint TLS acessível — não é papel desta checagem relatar
@@ -79,6 +84,7 @@ class TlsChecker(Checker):
                 references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
             )
         yield from self._check_protocols(legados)
+        yield from self._check_tls_hardening(tls_version, tls_cipher)
 
     def _check_expiry(self, cert: x509.Certificate) -> Iterable[Finding]:
         not_after = _not_valid_after(cert)
@@ -179,6 +185,56 @@ class TlsChecker(Checker):
                 references=(ref.MOZILLA_TLS,),
             )
 
+    def _check_tls_hardening(self, version: str | None, cipher: str | None) -> Iterable[Finding]:
+        """Profundidade de TLS a partir de UM handshake padrão: se o cliente (que suporta
+        TLS 1.3) negociou 1.2, o servidor não oferece 1.3; e a cifra 1.2 revela se há forward
+        secrecy (PFS). Cifras de TLS 1.3 são sempre PFS — nada a sinalizar nesse caso."""
+        if version != "TLSv1.2":
+            return  # 1.3 negociado (ok) ou handshake indisponível (inconclusivo)
+
+        # Só afirmamos "servidor sem TLS 1.3" se o PRÓPRIO cliente do scanner suporta 1.3;
+        # caso contrário, negociar 1.2 é limitação do scanner (build sem 1.3 ou proxy no
+        # caminho), não do servidor — evita um falso-positivo em toda a frota escaneada.
+        if ssl.HAS_TLSv1_3:
+            yield Finding(
+                id="TLS_13_AUSENTE",
+                title="TLS 1.3 não suportado",
+                category=self.category,
+                severity=Severity.INFO,
+                description="O servidor não negociou TLS 1.3 (o melhor protocolo obtido foi TLS 1.2).",
+                evidence=f"Versão negociada no caminho testado: {version}",
+                impact=(
+                    "TLS 1.3 é mais rápido e remove famílias inteiras de cifras e modos frágeis do "
+                    "1.2. Sua ausência não é uma falha, mas é hardening recomendado."
+                ),
+                recommendation="Habilite TLS 1.3 no servidor/edge (mantendo 1.2 como piso de compatibilidade).",
+                references=(ref.MOZILLA_TLS, ref.MOZILLA_SSL_CONFIG),
+            )
+
+        if cipher is None:
+            return
+        upper = cipher.upper()
+        # PFS presente se houver troca efêmera: ECDHE ou DHE. Cuidado: "ECDHE" contém "DHE",
+        # então a checagem cobre os dois corretamente (ECDHE cai no 1º termo; DHE puro no 2º).
+        if "ECDHE" not in upper and "DHE" not in upper:
+            yield Finding(
+                id="TLS_SEM_PFS",
+                title="Cifra TLS 1.2 sem forward secrecy",
+                category=self.category,
+                severity=Severity.LOW,
+                description=f"A cifra negociada em TLS 1.2 não usa troca de chave efêmera: `{cipher}`.",
+                evidence=f"Cifra negociada: {cipher}",
+                impact=(
+                    "Sem forward secrecy (PFS), se a chave privada do servidor vazar no futuro, "
+                    "todo o tráfego capturado no passado pode ser decifrado retroativamente."
+                ),
+                recommendation=(
+                    "Priorize cifras ECDHE (ou DHE) no servidor e desabilite a troca de chave RSA "
+                    "estática, seguindo o perfil intermediário da Mozilla."
+                ),
+                references=(ref.MOZILLA_TLS, ref.MOZILLA_SSL_CONFIG),
+            )
+
     def _check_protocols(self, legados: list[str]) -> Iterable[Finding]:
         if legados:
             yield Finding(
@@ -201,14 +257,14 @@ class TlsChecker(Checker):
 # --------------------------------------------------------------------------- #
 # Funções auxiliares de baixo nível
 # --------------------------------------------------------------------------- #
-def _fetch_certificate(host: str, port: int) -> bytes | None:
+def _fetch_certificate(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> bytes | None:
     """Obtém o certificado do servidor mesmo que não seja confiável/expirado."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
     try:
         with (
-            socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
+            socket.create_connection((host, port), timeout=timeout) as sock,
             context.wrap_socket(sock, server_hostname=host) as tls,
         ):
             return tls.getpeercert(binary_form=True)
@@ -216,13 +272,13 @@ def _fetch_certificate(host: str, port: int) -> bytes | None:
         return None
 
 
-def _trust_error(host: str, port: int) -> str | None:
+def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> str | None:
     """``None`` se a cadeia é confiável (ou a falha já tem checagem dedicada); caso
     contrário, a mensagem curta da falha de CADEIA de confiança."""
     context = ssl.create_default_context()
     try:
         with (
-            socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
+            socket.create_connection((host, port), timeout=timeout) as sock,
             context.wrap_socket(sock, server_hostname=host),
         ):
             return None
@@ -237,7 +293,30 @@ def _trust_error(host: str, port: int) -> str | None:
         return None
 
 
-def _accepts_legacy_tls(host: str, port: int) -> list[str]:
+def _tls_capabilities(
+    host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT
+) -> tuple[str | None, str | None]:
+    """Versão e cifra negociadas num handshake PADRÃO (cliente moderno, até TLS 1.3).
+
+    Retorna ``(versão, cifra)`` — ex.: ``("TLSv1.3", "TLS_AES_256_GCM_SHA384")`` — ou
+    ``(None, None)`` se o handshake falhar. Um cliente 1.3-capaz que acaba em 1.2 indica que
+    o servidor não oferece 1.3; a cifra 1.2 revela a presença de forward secrecy.
+    """
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    try:
+        with (
+            socket.create_connection((host, port), timeout=timeout) as sock,
+            context.wrap_socket(sock, server_hostname=host) as tls,
+        ):
+            cipher = tls.cipher()
+            return tls.version(), (cipher[0] if cipher else None)
+    except (OSError, ssl.SSLError):
+        return None, None
+
+
+def _accepts_legacy_tls(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> list[str]:
     """Testa, de forma tolerante e em PARALELO, se TLS 1.0/1.1 são aceitos."""
 
     def probe(versao: ssl.TLSVersion, rotulo: str) -> str | None:
@@ -249,9 +328,17 @@ def _accepts_legacy_tls(host: str, port: int) -> list[str]:
             context.maximum_version = versao
         except (ValueError, OSError):
             return None  # OpenSSL local não permite forçar essa versão
+        # OpenSSL 3.x remove as cifras de TLS 1.0/1.1 no SECLEVEL padrão (2). Sem baixar o
+        # nível, o handshake falharia por "no ciphers" no NOSSO cliente e a checagem viraria
+        # código morto (falso-negativo). Baixamos o SECLEVEL do cliente para OFERECER as cifras
+        # legadas — assim o resultado reflete a aceitação REAL do servidor (que, se bem
+        # configurado, rejeita com alerta de versão de protocolo).
+        # build sem SECLEVEL configurável: segue com as cifras padrão (pode não negociar legado)
+        with contextlib.suppress(ssl.SSLError, OSError):
+            context.set_ciphers("DEFAULT@SECLEVEL=0")
         try:
             with (
-                socket.create_connection((host, port), timeout=_HANDSHAKE_TIMEOUT) as sock,
+                socket.create_connection((host, port), timeout=timeout) as sock,
                 context.wrap_socket(sock, server_hostname=host),
             ):
                 return rotulo
