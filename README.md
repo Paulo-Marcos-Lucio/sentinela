@@ -117,7 +117,7 @@ O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e d
 
 - 🕸️ **Modo profundo (crawler):** mapeia a **aplicação inteira** — páginas servidas, rotas de SPA lidas direto do bundle e endpoints — e diagnostica **página a página**, não só a URL que você digitou. Reconhece, categoriza e mostra a superfície toda daquele mesmo jeito didático (o que é · por que importa · como corrigir).
 - 👁️ **Sondagem ativa** de dezenas de rotas e artefatos sensíveis (muito além do modo aberto);
-- 🧭 **Análise do contrato OpenAPI** da sua API — enumera as operações e aponta as que ficaram **sem autenticação**;
+- 🧭 **Análise E confirmação ativa da API:** enumera as operações do contrato OpenAPI, aponta as sem autenticação e **confirma no ar** — bate no endpoint sem credencial e prova se a auth é aplicada de fato (acabou o "achismo" da análise estática). Mapeia também pontos de **reflexão de parâmetro** (superfície de XSS), tudo read-only e sem tocar em rotas de ação;
 - 🐛 **Detecção de modo debug e erro verboso**, provocando o servidor com segurança (read-only).
 
 É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
