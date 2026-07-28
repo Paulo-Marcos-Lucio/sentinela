@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 300" role="img" aria-label="Sentinela — o olho que vigia">
+      <defs>
+        <radialGradient id="se-bg" cx="0.15" cy="0.5" r="1"><stop offset="0" stop-color="#04141f"/><stop offset="1" stop-color="#01060c"/></radialGradient>
+        <radialGradient id="se-glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#35d6ff" stop-opacity=".6"/><stop offset="1" stop-color="#35d6ff" stop-opacity="0"/></radialGradient>
+      </defs>
+      <rect width="1280" height="300" fill="url(#se-bg)"/>
+      <!-- barramento de circuito com dados trafegando -->
+      <g fill="none" stroke="#35d6ff" stroke-linecap="round" stroke-linejoin="round">
+        <g stroke-opacity=".14" stroke-width="2"><path d="M600 276 H1150"/><path d="M812 276 V214 Q812 202 824 202 H1002"/><path d="M690 30 H1040"/><path d="M1176 66 V236"/></g>
+        <g stroke-opacity=".4"><circle cx="600" cy="276" r="6" fill="#35d6ff" fill-opacity=".3"/><circle cx="690" cy="30" r="4" fill="#35d6ff" fill-opacity=".3"/><rect x="994" y="186" width="16" height="16" rx="2" fill="#35d6ff" fill-opacity=".22"/><path d="M1150 276 h30 m-9 -6 l13 6 -13 6"/></g>
+        <g stroke="#bdf3ff" stroke-width="2.4" stroke-opacity=".9" stroke-dasharray="9 620">
+          <path d="M600 276 H1150"><animate attributeName="stroke-dashoffset" values="629;0" dur="3.4s" repeatCount="indefinite"/></path>
+          <path d="M812 276 V214 Q812 202 824 202 H1002"><animate attributeName="stroke-dashoffset" values="629;0" dur="4.2s" begin="-1.5s" repeatCount="indefinite"/></path>
+          <path d="M690 30 H1040"><animate attributeName="stroke-dashoffset" values="629;0" dur="3.8s" begin="-0.8s" repeatCount="indefinite"/></path>
+          <path d="M1176 66 V236"><animate attributeName="stroke-dashoffset" values="629;0" dur="3s" begin="-2s" repeatCount="indefinite"/></path>
+        </g>
+        <circle r="3.5" fill="#bdf3ff"><animateMotion path="M600 276 H1150" dur="3.4s" repeatCount="indefinite"/></circle>
+      </g>
+      <!-- binary rain -->
+      <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" fill="#35d6ff">
+        <text x="470" opacity=".16">10<tspan x="470" dy="17">1</tspan><tspan x="470" dy="17">0</tspan><tspan x="470" dy="17">1</tspan><tspan x="470" dy="17">1</tspan><animateTransform attributeName="transform" type="translate" values="0,-70;0,320" dur="7s" begin="-1s" repeatCount="indefinite"/></text>
+        <text x="620" opacity=".12">0<tspan x="620" dy="17">1</tspan><tspan x="620" dy="17">1</tspan><tspan x="620" dy="17">0</tspan><animateTransform attributeName="transform" type="translate" values="0,-50;0,320" dur="9s" begin="-4s" repeatCount="indefinite"/></text>
+        <text x="880" opacity=".14">1<tspan x="880" dy="17">0</tspan><tspan x="880" dy="17">0</tspan><tspan x="880" dy="17">1</tspan><tspan x="880" dy="17">0</tspan><animateTransform attributeName="transform" type="translate" values="0,-90;0,320" dur="6s" begin="-2s" repeatCount="indefinite"/></text>
+        <text x="1040" opacity=".10">01<tspan x="1040" dy="17">1</tspan><tspan x="1040" dy="17">0</tspan><animateTransform attributeName="transform" type="translate" values="0,-40;0,320" dur="8s" repeatCount="indefinite"/></text>
+      </g>
+      <!-- the eye -->
+      <g transform="translate(190,150)">
+        <circle r="130" fill="url(#se-glow)"><animate attributeName="opacity" values=".7;1;.7" dur="4s" repeatCount="indefinite"/></circle>
+        <circle r="118" fill="none" stroke="#35d6ff" stroke-opacity=".14"/>
+        <circle r="150" fill="none" stroke="#35d6ff" stroke-opacity=".08"/>
+        <path d="M-104 0 Q0 -66 104 0 Q0 66 -104 0 Z" fill="#02090f" stroke="#59e2ff" stroke-width="2.5"/>
+        <g>
+          <circle r="40" fill="#021018" stroke="#35d6ff" stroke-width="2" stroke-opacity=".5"/>
+          <circle r="36" fill="none" stroke="#59e2ff" stroke-width="5"><animate attributeName="r" values="30;40;30" dur="4.5s" repeatCount="indefinite"/></circle>
+          <g stroke="#35d6ff" stroke-opacity=".55" stroke-width="1.5"><path d="M0 -34V-18M0 34V18M-34 0H-18M34 0H18M-24 -24l10 10M24 24l-10 -10M-24 24l10 -10M24 -24l-10 10"/></g>
+          <circle r="15" fill="#0a2230" stroke="#7ff0ff" stroke-width="2"/>
+          <circle r="6" fill="#eaffff"><animate attributeName="opacity" values="1;.4;1" dur="2s" repeatCount="indefinite"/></circle>
+          <animateTransform attributeName="transform" type="translate" values="0,0; 14,-6; -12,6; 0,0" dur="9s" repeatCount="indefinite"/>
+        </g>
+      </g>
+      <text x="410" y="118" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="15" letter-spacing="5" fill="#7fe4ff" opacity=".9">DIAGNÓSTICO EXTERNO · O QUE O ATACANTE VÊ</text>
+      <text x="408" y="192" font-family="Segoe UI,system-ui,sans-serif" font-weight="800" font-size="78" letter-spacing="-1" fill="#eafaff">Sentinela</text>
+      <text x="412" y="232" font-family="Segoe UI,system-ui,sans-serif" font-size="21" fill="#9fd4ea">O olho que vela a sua superfície — no escuro.</text>
+      <g font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" fill="#8fcbe0">
+        <rect x="412" y="250" width="70" height="26" rx="13" fill="none" stroke="#35d6ff" stroke-opacity=".4"/><text x="426" y="267">TLS</text>
+        <rect x="490" y="250" width="118" height="26" rx="13" fill="none" stroke="#35d6ff" stroke-opacity=".4"/><text x="504" y="267">Cabeçalhos</text>
+        <rect x="616" y="250" width="92" height="26" rx="13" fill="none" stroke="#35d6ff" stroke-opacity=".4"/><text x="630" y="267">DNS/CT</text>
+      </g>
+      <g transform="translate(1092,44)"><rect width="150" height="34" rx="17" fill="#031420" stroke="#f5c451" stroke-opacity=".55"/><path d="M22 17a5 5 0 0 1 10 0v4M20 21h14v11H20z" fill="none" stroke="#f5c451" stroke-width="1.5"/><text x="44" y="23" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="13" letter-spacing="1" fill="#f3d488">PRO · privado</text></g>
+    </svg>

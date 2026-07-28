@@ -1,3 +1,5 @@
+<a href="https://paulo-marcos-lucio.github.io"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/banner-abismo.svg" alt="Sentinela — o olho que vela a superfície da sua aplicação: diagnóstico externo de segurança web (TLS, cabeçalhos, cookies, CORS, DNS/e-mail, subdomínios)" width="100%"/></a>
+
 <div align="center">
 
 # 🛡️ Sentinela
@@ -106,6 +108,27 @@ Principais opções do `scan`:
 | `--perfil` | `completo` (padrão) roda tudo; `rapido` pula TLS, DNS/e-mail e robots.txt (triagem ágil). |
 
 📄 **Veja um relatório real de exemplo:** [`docs/exemplo-relatorio.md`](docs/exemplo-relatorio.md)
+
+---
+
+## 🔓 Versão Pro (privada) — a leitura que cruza a linha
+
+O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava o **recon ativo autorizado**, e uma capacidade dessas na mão de qualquer um é risco, não recurso:
+
+- 👁️ **Sondagem ativa** de dezenas de rotas e artefatos sensíveis (muito além do modo aberto);
+- 🧭 **Análise do contrato OpenAPI** da sua API — enumera as operações e aponta as que ficaram **sem autenticação**;
+- 🐛 **Detecção de modo debug e erro verboso**, provocando o servidor com segurança (read-only).
+
+É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
+
+> **É a sua aplicação que precisa desse nível?** Faço o diagnóstico completo, a correção e o reteste — com a régua de quem veio do **backend financeiro regulado** (Pix, Open Finance, FAPI).
+
+<div align="center">
+
+[![Pacotes e valores](https://img.shields.io/badge/Pacotes_e_valores-paulo--marcos--lucio.github.io-0f766e?style=for-the-badge)](https://paulo-marcos-lucio.github.io)
+[![Falar no LinkedIn](https://img.shields.io/badge/LinkedIn-Falar_agora-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/paulo-marcos-a07379174/)
+
+</div>
 
 ---
 
