@@ -113,8 +113,9 @@ Principais opções do `scan`:
 
 ## 🔓 Versão Pro (privada) — a leitura que cruza a linha
 
-O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava o **recon ativo autorizado**, e uma capacidade dessas na mão de qualquer um é risco, não recurso:
+O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava a leitura profunda, e uma capacidade dessas na mão de qualquer um é risco, não recurso:
 
+- 🕸️ **Modo profundo (crawler):** mapeia a **aplicação inteira** — páginas servidas, rotas de SPA lidas direto do bundle e endpoints — e diagnostica **página a página**, não só a URL que você digitou. Reconhece, categoriza e mostra a superfície toda daquele mesmo jeito didático (o que é · por que importa · como corrigir).
 - 👁️ **Sondagem ativa** de dezenas de rotas e artefatos sensíveis (muito além do modo aberto);
 - 🧭 **Análise do contrato OpenAPI** da sua API — enumera as operações e aponta as que ficaram **sem autenticação**;
 - 🐛 **Detecção de modo debug e erro verboso**, provocando o servidor com segurança (read-only).
