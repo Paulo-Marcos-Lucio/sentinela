@@ -1,4 +1,4 @@
-<a href="https://paulo-marcos-lucio.github.io"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/banner-abismo.svg" alt="Sentinela — o olho que vela a superfície da sua aplicação: diagnóstico externo de segurança web (TLS, cabeçalhos, cookies, CORS, DNS/e-mail, subdomínios)" width="100%"/></a>
+<a href="https://paulo-marcos-lucio.github.io"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/banner-abismo-v2.svg" alt="Sentinela — o olho que vela a superfície da sua aplicação: diagnóstico externo de segurança web (TLS, cabeçalhos, cookies, CORS, DNS/e-mail, subdomínios)" width="100%"/></a>
 
 <div align="center">
 
