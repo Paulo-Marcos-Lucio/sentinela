@@ -7,6 +7,16 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **Checagem de superfície de formulários e injeção** (`forms`, não-intrusiva): análise passiva
+  do HTML já baixado, sem enviar payload. Detecta credencial trafegando em GET (`SENHA_EM_GET`,
+  A07/CWE-598), formulário com campo sensível postando para destino `http://` — conteúdo misto —
+  (`FORMULARIO_CREDENCIAL_SEM_HTTPS`, A04/CWE-319, sem duplicar o `SENHA_SEM_HTTPS` do checker de
+  conteúdo), formulário que muda estado sem token anti-CSRF (`CSRF_TOKEN_AUSENTE`, A01/CWE-352),
+  parâmetro refletido sem escape como superfície de XSS (`REFLEXAO_DE_PARAMETRO`, A05/CWE-79) e
+  dado sensível na query string (`DADO_SENSIVEL_NA_URL`, A07/CWE-598). É honesta sobre a fronteira:
+  sinaliza a *superfície*; a CONFIRMAÇÃO ativa (provar SQLi/XSS com payload) é da edição Pro.
+
 ### ⚠️ Mudanças incompatíveis
 - **Contrato do relatório JSON** (`-f json`): as chaves passam para inglês, seguindo o schema
   comum da suíte, e o documento traz `"schema": "suite-appsec/1"` no topo. A regra (já escrita

@@ -8,6 +8,7 @@ from sentinela.checks.cookies import CookiesChecker
 from sentinela.checks.cors import CorsChecker
 from sentinela.checks.dns_email import DnsEmailChecker
 from sentinela.checks.exposure import ExposureChecker
+from sentinela.checks.forms import FormsChecker
 from sentinela.checks.http_methods import HttpMethodsChecker
 from sentinela.checks.info_disclosure import InfoDisclosureChecker
 from sentinela.checks.security_headers import SecurityHeadersChecker
@@ -27,6 +28,7 @@ ALL_CHECKERS: tuple[type[Checker], ...] = (
     HttpMethodsChecker,
     InfoDisclosureChecker,
     ContentChecker,
+    FormsChecker,
     WellKnownChecker,
     DnsEmailChecker,
     SubdomainTakeoverChecker,

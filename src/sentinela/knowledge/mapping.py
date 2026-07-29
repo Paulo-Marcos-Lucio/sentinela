@@ -20,6 +20,7 @@ A01 = "A01:2025 Broken Access Control"
 A02 = "A02:2025 Security Misconfiguration"
 A03 = "A03:2025 Software Supply Chain Failures"
 A04 = "A04:2025 Cryptographic Failures"
+A05 = "A05:2025 Injection"
 A07 = "A07:2025 Authentication Failures"
 
 
@@ -125,6 +126,16 @@ _TAGS: dict[str, Tag] = {
     "ALVO_INACESSIVEL": Tag(None, None, None),
     # Higiene / processo (sem OWASP direto)
     "SECURITY_TXT_AUSENTE": Tag(None, None, None),
+    # Superfície de formulários e injeção (checker passivo `forms`)
+    "SENHA_EM_GET": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
+    "FORMULARIO_CREDENCIAL_SEM_HTTPS": Tag(
+        A04, "CWE-319", "Cleartext Transmission of Sensitive Information"
+    ),
+    "CSRF_TOKEN_AUSENTE": Tag(A01, "CWE-352", "Cross-Site Request Forgery (CSRF)"),
+    "REFLEXAO_DE_PARAMETRO": Tag(
+        A05, "CWE-79", "Improper Neutralization of Input During Web Page Generation (XSS)"
+    ),
+    "DADO_SENSIVEL_NA_URL": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
 }
 
 

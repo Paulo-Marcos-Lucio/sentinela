@@ -332,6 +332,31 @@ _PLAIN: dict[str, str] = {
         "Falta um canal-padrão de contato de segurança (o security.txt) — o lugar onde um "
         "pesquisador ético avisaria se encontrasse uma falha. Sem ele, o aviso pode nunca chegar."
     ),
+    # --- Superfície de formulários e injeção (as fichas que o cliente preenche) ---
+    "SENHA_EM_GET": (
+        "A senha que o cliente digita vai escrita na etiqueta de endereço do envelope, à vista de "
+        "todos — em vez de dentro, lacrada. Ela acaba copiada no livro de registro do servidor, no "
+        "histórico do navegador e no recado enviado ao próximo site. Vaza sem ninguém precisar roubar."
+    ),
+    "FORMULARIO_CREDENCIAL_SEM_HTTPS": (
+        "A vitrine é segura, mas a ficha preenchida com a senha é despachada por um mensageiro sem "
+        "lacre (o formulário envia para um endereço `http://`). No caminho, qualquer um lê e pode "
+        "trocar o conteúdo — mesmo com a loja aparentando estar trancada."
+    ),
+    "CSRF_TOKEN_AUSENTE": (
+        "A loja aceita uma ficha assinada sem conferir se o cliente realmente quis assiná-la. Um "
+        "golpista pode enganar um cliente já logado para 'assinar' sem perceber (mudar e-mail, fazer "
+        "um pedido). Falta o selo que prova que a ficha saiu de dentro da própria loja."
+    ),
+    "REFLEXAO_DE_PARAMETRO": (
+        "O que o visitante escreve é devolvido na parede da loja exatamente como veio, sem filtro. "
+        "Se alguém escrever não um recado, mas uma INSTRUÇÃO, ela pode acabar sendo executada no "
+        "navegador do próximo visitante. Aqui a gente só aponta a superfície; a prova é da versão Pro."
+    ),
+    "DADO_SENSIVEL_NA_URL": (
+        "Um dado secreto (token, senha) vai escrito na etiqueta de endereço — e essa etiqueta é "
+        "copiada em todo livro de registro, histórico e recado a terceiros. Segredo não é lugar de URL."
+    ),
 }
 
 

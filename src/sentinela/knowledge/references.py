@@ -20,6 +20,14 @@ OWASP_CSP_CHEATSHEET = (
 )
 OWASP_CORS = "https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html"
 OWASP_COOKIES = "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html"
+OWASP_XSS = (
+    "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+)
+OWASP_CSRF = (
+    "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+)
+OWASP_SQLI = "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+OWASP_INPUT_VALIDATION = "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
 
 # MDN
 MDN_HSTS = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Strict-Transport-Security"
