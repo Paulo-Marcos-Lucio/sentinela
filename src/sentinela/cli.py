@@ -106,6 +106,9 @@ def scan(
         typer.Option(
             "--autorizado",
             "--authorized",
+            # Não divulgado na ajuda: uso restrito a quem tem autorização por escrito
+            # e conhece a trava. Manter o aviso em tempo de execução (mais abaixo).
+            hidden=True,
             help="ATIVA checagens intrusivas. Declare somente com autorização por escrito do alvo.",
         ),
     ] = False,
@@ -199,9 +202,10 @@ def checagens() -> None:
     tabela.add_column("ID", style="bold")
     tabela.add_column("Nome")
     tabela.add_column("Categoria", style="dim")
-    tabela.add_column("Intrusiva", justify="center")
     for cid, nome, categoria, intrusiva in all_check_metadata():
-        tabela.add_row(cid, nome, categoria, "sim" if intrusiva else "—")
+        if intrusiva:
+            continue
+        tabela.add_row(cid, nome, categoria)
     console.print(tabela)
 
 

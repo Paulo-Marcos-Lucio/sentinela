@@ -44,7 +44,6 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 | **Arquivos públicos** | `robots.txt` (RFC 9309) revelando caminhos sensíveis por convenção | A02 |
 | **Superfície de ataque** | Descoberta de subdomínios via **Certificate Transparency** e detecção de **subdomain takeover** (CNAME órfão) — opt-in `--descobrir` | A02 |
 | **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
-| **Rotas sensíveis** 🔒 | `.git`, `.env`, `.svn`, `server-status`, `phpinfo`, `security.txt` — **intrusivo, opt-in** | A02 |
 
 Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**, **impacto**, **recomendação prática** e **referências** (OWASP, MDN, RFC), além da classificação **OWASP Top 10:2025 + CWE**.
 
@@ -85,9 +84,6 @@ sentinela scan https://exemplo.com.br -f html -o relatorio-exemplo.html
 # vários formatos de uma vez
 sentinela scan exemplo.com.br -f console -f markdown -f json
 
-# incluir checagens intrusivas — SOMENTE com autorização por escrito
-sentinela scan exemplo.com.br --autorizado
-
 # uso em CI/CD: falha o pipeline se houver achado de severidade alta ou superior
 sentinela scan exemplo.com.br --falhar-em alta
 
@@ -101,7 +97,6 @@ Principais opções do `scan`:
 | --- | --- |
 | `-f, --formato` | `console` (padrão), `markdown`, `html`, `json`, `sarif`. Repetível. |
 | `-o, --saida` | Arquivo de saída para um formato de arquivo. |
-| `--autorizado` | Ativa as checagens **intrusivas**. Só use com autorização. |
 | `--falhar-em` | `nenhum`/`baixa`/`media`/`alta`/`critica` — código de saída 1 para CI. |
 | `--timeout` | Timeout por requisição (padrão 15s). |
 | `--pular` / `--somente` | Filtra quais checagens rodam (por ID). |
@@ -168,7 +163,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 **Esta ferramenta é para avaliação de sistemas que você possui ou tem autorização explícita e por escrito para testar.**
 
 - O **modo padrão é não-intrusivo**: só observa o que o servidor já expõe a um visitante comum (cabeçalhos, TLS, consultas DNS públicas).
-- O **modo intrusivo** (`--autorizado`) sonda caminhos sensíveis e só roda quando você declara possuir autorização. É uma trava técnica deliberada.
+- Mesmo assim, **rode apenas contra domínios que você possui ou tem autorização por escrito para avaliar**. Volume de requisições e registro em log são do dono do sistema, não seus.
 - No Brasil, o acesso não autorizado a dispositivo informático é crime (**Lei 12.737/2012**, agravada pela **Lei 14.155/2021**). A **autorização por escrito, com escopo definido**, é o que descaracteriza o ilícito. Considere ainda o **Marco Civil da Internet** (Lei 12.965/2014) e a **LGPD** (Lei 13.709/2018) ao tratar qualquer dado encontrado.
 
 Use com responsabilidade. Veja [`SECURITY.md`](SECURITY.md) para divulgação responsável.
