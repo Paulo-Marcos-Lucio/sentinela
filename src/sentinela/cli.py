@@ -57,14 +57,6 @@ class Formato(str, Enum):
     sarif = "sarif"
 
 
-class NivelFalha(str, Enum):
-    nenhum = "nenhum"
-    baixa = "baixa"
-    media = "media"
-    alta = "alta"
-    critica = "critica"
-
-
 class Perfil(str, Enum):
     completo = "completo"
     rapido = "rapido"
@@ -82,12 +74,54 @@ _RENDERERS = {
     Formato.json: render_json,
     Formato.sarif: render_sarif,
 }
-_FALHA_SEV = {
-    NivelFalha.baixa: Severity.LOW,
-    NivelFalha.media: Severity.MEDIUM,
-    NivelFalha.alta: Severity.HIGH,
-    NivelFalha.critica: Severity.CRITICAL,
+# Níveis aceitos por `--falhar-em`. A Sentinela é a única da suíte com superfície bilíngue
+# (`--formato`/`--format`, `--pular`/`--skip`); os VALORES seguem o mesmo padrão, para que
+# a mesma linha de CI funcione escrita em qualquer um dos dois vocabulários.
+_FALHA_SEV: dict[str, Severity | None] = {
+    "nenhum": None,
+    "none": None,
+    "info": Severity.INFO,
+    "baixa": Severity.LOW,
+    "low": Severity.LOW,
+    "media": Severity.MEDIUM,
+    "medium": Severity.MEDIUM,
+    "alta": Severity.HIGH,
+    "high": Severity.HIGH,
+    "critica": Severity.CRITICAL,
+    "critical": Severity.CRITICAL,
 }
+
+
+def _nivel_de_falha(valor: str) -> Severity | None:
+    chave = valor.strip().lower()
+    if chave not in _FALHA_SEV:
+        raise typer.BadParameter(
+            f"nível desconhecido: {valor!r}. Válidos: {', '.join(_FALHA_SEV)}.",
+            param_hint="--falhar-em",
+        )
+    return _FALHA_SEV[chave]
+
+
+def _versao_cb(valor: bool) -> None:
+    if valor:
+        console.print(f"Sentinela v{__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _principal(
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            callback=_versao_cb,
+            is_eager=True,
+            help="Mostra a versão e sai.",
+        ),
+    ] = False,
+) -> None:
+    """Sentinela — diagnóstico de segurança para aplicações web."""
 
 
 @app.command()
@@ -147,22 +181,34 @@ def scan(
     ] = Perfil.completo,
     user_agent: Annotated[str | None, typer.Option("--user-agent", help="User-Agent customizado.")] = None,
     falhar_em: Annotated[
-        NivelFalha,
+        str,
         typer.Option(
             "--falhar-em",
             "--fail-on",
-            help="Código de saída 1 se houver achado >= este nível (útil em CI).",
+            help=(
+                "Código de saída 1 se houver achado >= este nível (útil em CI). "
+                "Aceita PT ou EN: nenhum|info|baixa|media|alta|critica."
+            ),
         ),
-    ] = NivelFalha.alta,
+    ] = "alta",
 ) -> None:
     """Executa uma varredura de diagnóstico no ALVO informado."""
     formatos = formato or [Formato.console]
+    limite = _nivel_de_falha(falhar_em)
     try:
         target = parse_target(url)
     except ValueError as exc:
         err_console.print(f"[bold red]Erro:[/] {exc}")
         raise typer.Exit(code=2) from exc
 
+    _valida_ids_de_checagem(somente, pular)
+
+    if descobrir:
+        err_console.print(
+            "[yellow]Aviso:[/] `--descobrir` consulta o Certificate Transparency e faz "
+            "requisições HTTP contra os subdomínios encontrados. O escopo fica limitado ao "
+            "domínio do alvo — confirme que ele está dentro da sua autorização."
+        )
     if autorizado:
         console.print(
             "[bold yellow]⚠ Modo intrusivo ativado.[/] Você declarou possuir autorização "
@@ -190,13 +236,32 @@ def scan(
         result = run_scan(target, config)
 
     _emit(result, formatos, saida)
-    _maybe_fail(result, falhar_em)
+    _maybe_fail(result, limite, falhar_em)
+
+
+def _valida_ids_de_checagem(somente: list[str] | None, pular: list[str] | None) -> None:
+    """ID inexistente em `--somente`/`--pular` é ERRO DE USO, não varredura silenciosa.
+
+    Antes, `--somente securityheaders` (sem o hífen) rodava ZERO checagens e a ferramenta
+    imprimia "Nota 100/100 · A" com código de saída 0 — o pior desfecho possível num
+    pipeline: o gate fica verde para sempre e ninguém percebe.
+    """
+    validos = {cid for cid, _n, _c, _i in all_check_metadata()}
+    desconhecidos = sorted((set(somente or ()) | set(pular or ())) - validos)
+    if desconhecidos:
+        err_console.print(
+            f"[bold red]Erro:[/] checagem(ns) desconhecida(s): {', '.join(desconhecidos)}.\n"
+            f"IDs válidos: {', '.join(sorted(validos))}."
+        )
+        raise typer.Exit(code=2)
 
 
 @app.command()
-def checagens() -> None:
-    """Lista todas as checagens disponíveis."""
+def regras() -> None:
+    """Lista as checagens executadas e o catálogo de achados que elas sabem emitir."""
     from rich.table import Table
+
+    from sentinela.knowledge.mapping import _TAGS
 
     tabela = Table(title="Checagens da Sentinela")
     tabela.add_column("ID", style="bold")
@@ -207,6 +272,24 @@ def checagens() -> None:
             continue
         tabela.add_row(cid, nome, categoria)
     console.print(tabela)
+
+    catalogo = Table(
+        title=f"Achados catalogados ({len(_TAGS)})",
+        # A severidade NÃO entra: aqui ela é contextual (o mesmo ID sai como Média ou Alta
+        # conforme o contexto do alvo). Fixar um valor na tabela seria afirmar o que a
+        # ferramenta não sabe antes de ver o alvo.
+        caption="A severidade é decidida no contexto de cada alvo — por isso não é listada aqui.",
+    )
+    catalogo.add_column("ID", style="bold")
+    catalogo.add_column("OWASP 2025 / CWE", style="dim")
+    for fid, tag in sorted(_TAGS.items()):
+        taxonomia = " · ".join(p for p in (tag.owasp, tag.cwe) if p) or "—"
+        catalogo.add_row(fid, taxonomia)
+    console.print(catalogo)
+
+
+# Alias histórico: o comando nasceu como `checagens`; `regras` é o nome comum da suíte.
+app.command("checagens", hidden=True)(regras)
 
 
 @app.command()
@@ -235,10 +318,9 @@ def _emit(result: ScanResult, formatos: list[Formato], saida: Path | None) -> No
         console.print(f"[green]✓[/] Relatório {fmt.value} salvo em [bold]{destino}[/]")
 
 
-def _maybe_fail(result: ScanResult, falhar_em: NivelFalha) -> None:
-    if falhar_em is NivelFalha.nenhum:
+def _maybe_fail(result: ScanResult, limite: Severity | None, rotulo: str) -> None:
+    if limite is None:
         return
-    limite = _FALHA_SEV[falhar_em]
     if any(f.severity >= limite for f in result.findings):
-        err_console.print(f"[red]Achados >= {falhar_em.value} encontrados.[/]")
+        err_console.print(f"[red]Achados >= {rotulo} encontrados.[/]")
         raise typer.Exit(code=1)

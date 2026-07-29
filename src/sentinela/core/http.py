@@ -183,6 +183,12 @@ def _host_is_blocked(host: str | None) -> bool:
 
     Aplicada apenas a destinos de redirecionamento — nunca ao alvo inicial, que é
     a escolha explícita do operador (permite varredura de hosts internos).
+
+    Política de falha: FECHADO. Se o nome não resolve, não há como afirmar que ele é
+    externo, e a guarda bloqueia. Falhar aberto deixaria uma janela entre a checagem
+    (esta resolução) e a resolução que o ``httpx`` faz depois — o intervalo em que vive
+    o DNS rebinding. O custo é parar a cadeia num redirecionamento cujo DNS falhou por
+    outro motivo; nesse caso a requisição seguinte falharia de qualquer jeito.
     """
     if not host:
         return False
@@ -193,7 +199,7 @@ def _host_is_blocked(host: str | None) -> bool:
     try:
         infos = socket.getaddrinfo(host, None)
     except (OSError, UnicodeError):
-        return False
+        return True  # não resolveu → não seguimos (falha-fechado)
     for info in infos:
         try:
             ip = ipaddress.ip_address(info[4][0])

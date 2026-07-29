@@ -129,6 +129,37 @@ def test_s3_orfao_com_fingerprint_ainda_e_critico(monkeypatch: pytest.MonkeyPatc
     assert "SUBDOMAIN_TAKEOVER" in _ids(_ctx(client=FakeClient(handler=handler)))
 
 
+# --------------------------------------------------------------------------- #
+# BARREIRA DE ESCOPO. Este checker enumera o Certificate Transparency e dispara GETs
+# de verdade. Sem barreira, um alvo em plataforma gerenciada fazia a ferramenta
+# enumerar o namespace do PROVEDOR (`github.io`, `amazonaws.com`), requisitar hosts de
+# terceiros e emitir CRÍTICO sobre ativo alheio — dentro do relatório do cliente, e sem
+# nenhuma declaração de autorização (`--descobrir` é independente de `--autorizado`).
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("alvo", "escopo"),
+    [
+        ("paulo.github.io", "paulo.github.io"),
+        ("meu-bucket.s3.amazonaws.com", "meu-bucket.s3.amazonaws.com"),
+        ("cliente.blogspot.com", "cliente.blogspot.com"),
+        ("cliente.zendesk.com", "cliente.zendesk.com"),  # fora da PSL privada: cai na lista curada
+        ("www.empresa.com.br", "empresa.com.br"),  # domínio próprio: escopo é o registrável
+    ],
+)
+def test_ct_nunca_e_consultado_acima_do_alvo_autorizado(
+    monkeypatch: pytest.MonkeyPatch, alvo: str, escopo: str
+) -> None:
+    consultado: list[str] = []
+
+    def _espiao(dominio: str) -> list[str]:
+        consultado.append(dominio)
+        return []
+
+    monkeypatch.setattr(st, "discover_subdomains", _espiao)
+    _ids(_ctx(host=alvo))
+    assert consultado == [escopo]
+
+
 def test_cname_orfao_sem_resposta_e_info(monkeypatch: pytest.MonkeyPatch) -> None:
     # CNAME p/ serviço takeover-able mas sem resposta HTTP -> INFO (dangling), NÃO MEDIUM.
     monkeypatch.setattr(st, "discover_subdomains", lambda _d: ["old.example.com"])

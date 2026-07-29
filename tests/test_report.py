@@ -35,12 +35,30 @@ def test_markdown_contem_secoes_e_taxonomia() -> None:
 
 
 def test_json_estruturado_valido() -> None:
+    # Contrato `suite-appsec/1`: chaves e valores de identificador em EN, texto em PT-BR.
+    # A Sentinela era a única das quatro emitindo chaves em português e severidade
+    # acentuada ("Média"), obrigando o consumidor a manter um de-para só para ela.
     data = json.loads(render_json(_sample()))
-    assert data["ferramenta"] == "sentinela"
-    assert data["alvo"]["host"] == "alvo.com"
-    assert data["achados"][0]["id"] == "CSP_AUSENTE"
-    assert data["achados"][0]["owasp"] == "A02:2025 Security Misconfiguration"
-    assert data["nota"]["conceito"] in {"A", "B", "C", "D", "F"}
+    assert data["schema"] == "suite-appsec/1"
+    assert data["tool"] == "sentinela"
+    assert data["owasp_edition"] == "2025"
+    assert data["target"]["host"] == "alvo.com"
+    achado = data["findings"][0]
+    assert achado["id"] == "CSP_AUSENTE"
+    assert achado["severity"] == "medium"  # identificador, sem acento
+    assert achado["severity_label"] == "Média"  # rótulo humano
+    assert achado["severity_rank"] == 2
+    assert achado["owasp"] == "A02:2025 Security Misconfiguration"
+    assert data["summary"]["score"]["grade"] in {"A", "B", "C", "D", "F"}
+
+
+def test_json_by_severity_traz_sempre_as_cinco_chaves() -> None:
+    # Um dashboard que soma by_severity["critical"] não pode quebrar num relatório limpo.
+    resumo = json.loads(render_json(_sample()))["summary"]
+    assert set(resumo["by_severity"]) == {"critical", "high", "medium", "low", "info"}
+    assert resumo["by_severity"]["critical"] == 0
+    assert resumo["by_severity"]["medium"] == 1
+    assert resumo["total"] == 1
 
 
 def test_html_autocontido_e_seguro() -> None:
@@ -56,4 +74,6 @@ def test_relatorio_vazio() -> None:
     target = Target(raw="x", scheme="https", host="alvo.com", port=443, url="https://alvo.com/")
     vazio = ScanResult(target=target, tool_version="0.1.0")
     assert "Nenhum achado" in render_markdown(vazio)
-    assert json.loads(render_json(vazio))["achados"] == []
+    dados = json.loads(render_json(vazio))
+    assert dados["findings"] == []
+    assert set(dados["summary"]["by_severity"]) == {"critical", "high", "medium", "low", "info"}

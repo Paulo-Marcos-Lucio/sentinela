@@ -1,0 +1,16 @@
+# Fixar action por SHA sem mecanismo de atualização é congelar a versão — inclusive uma
+# versão vulnerável. O Dependabot é a outra metade da prática: 1 PR agrupado por mês.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly

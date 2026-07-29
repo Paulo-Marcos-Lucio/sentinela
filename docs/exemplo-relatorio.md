@@ -1,13 +1,13 @@
 # Relatório de Diagnóstico de Segurança — paulo-marcos-lucio.github.io
 
-> Gerado pela **Sentinela v0.1.0** · 21/07/2026 15:40 UTC
+> Gerado pela **Sentinela v0.1.0** · 29/07/2026 19:38 UTC
 
 | Item | Valor |
 | --- | --- |
 | Alvo | `https://paulo-marcos-lucio.github.io/` |
 | Modo | Não-intrusivo |
-| Checagens executadas | 8 |
-| Nota de higiene | **70/100 · Conceito C** |
+| Checagens executadas | 11 |
+| Nota de higiene | **75/100 · Conceito B** |
 
 ## Sumário executivo
 
@@ -17,8 +17,8 @@ Sem achados críticos ou altos; há oportunidades de endurecimento (hardening) d
 | --- | --- |
 | 🔴 Crítica | 0 |
 | 🟠 Alta | 0 |
-| 🟡 Média | 3 |
-| 🔵 Baixa | 2 |
+| 🟡 Média | 2 |
+| 🔵 Baixa | 3 |
 | ⚪ Informativa | 4 |
 
 ## Achados
@@ -96,27 +96,30 @@ O cabeçalho `Permissions-Policy` não foi encontrado na resposta.
 - **Recomendação:** Defina uma `Permissions-Policy` restritiva, desabilitando recursos não usados, ex.: `Permissions-Policy: camera=(), microphone=(), geolocation=()`.
 - **Referências:** [ref](https://developer.mozilla.org/docs/Web/HTTP/Headers/Permissions-Policy) · [ref](https://owasp.org/www-project-secure-headers/)
 
+### Conteúdo da Página
+
+#### 🔵 Sub-recurso de terceiro sem Subresource Integrity (SRI)
+
+**Severidade:** Baixa · **ID:** `SRI_AUSENTE` · **OWASP:** A03:2025 Software Supply Chain Failures · **CWE-353** (Missing Support for Integrity Check)
+
+Há scripts/estilos carregados de origens externas sem o atributo `integrity` (SRI).
+
+- **Evidência:** `fonts.googleapis.com`
+- **Impacto:** Sem SRI, se o servidor de terceiro (CDN) for comprometido ou sequestrado, o navegador executa o código adulterado com total confiança — um vetor clássico de ataque à cadeia de suprimentos.
+- **Recomendação:** Adicione `integrity="sha384-..."` e `crossorigin="anonymous"` aos `<script>`/`<link>` de terceiros, fixando o hash da versão esperada.
+- **Referências:** [ref](https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity) · [ref](https://owasp.org/www-project-top-ten/)
+
 ### DNS / E-mail
 
-#### 🟡 Registro DMARC ausente
+#### ⚪ Domínio em hospedagem gerenciada (DNS/e-mail do provedor)
 
-**Severidade:** Média · **ID:** `DMARC_AUSENTE` · **OWASP:** A07:2025 Authentication Failures · **CWE-290** (Authentication Bypass by Spoofing)
+**Severidade:** Informativa · **ID:** `DNS_HOSPEDAGEM_GERENCIADA`
 
-O domínio `github.io` não publica uma política DMARC.
+`paulo-marcos-lucio.github.io` está sob hospedagem gerenciada — o dono do site não controla o DNS do apex nem envia e-mail por esse nome.
 
-- **Impacto:** Sem DMARC, mesmo com SPF/DKIM os provedores não sabem o que fazer com e-mails que falham na autenticação, deixando brecha para spoofing.
-- **Recomendação:** Publique um registro em `_dmarc.<domínio>` começando por monitoramento (`v=DMARC1; p=none; rua=mailto:...`) e evolua para `p=quarantine` e `p=reject`.
-- **Referências:** [ref](https://www.rfc-editor.org/rfc/rfc7489) · [ref](https://dmarc.org/overview/)
-
-#### ⚪ DNSSEC não detectado
-
-**Severidade:** Informativa · **ID:** `DNSSEC_AUSENTE` · **OWASP:** A02:2025 Security Misconfiguration · **CWE-345** (Insufficient Verification of Data Authenticity)
-
-Não foram encontrados registros DNSKEY para `github.io` (zona provavelmente não assinada).
-
-- **Impacto:** Sem DNSSEC, respostas DNS podem ser forjadas (cache poisoning), redirecionando usuários para servidores maliciosos.
-- **Recomendação:** Avalie habilitar DNSSEC no provedor de DNS para assinar a zona.
-- **Referências:** [ref](https://www.rfc-editor.org/rfc/rfc9364)
+- **Impacto:** Checagens de SPF/DMARC/CAA/DNSSEC não se aplicam (ou não são acionáveis) aqui: elas pertencem ao provedor, não a você. Puladas para não gerar achado enganoso.
+- **Recomendação:** Para postura de e-mail/DNS, rode a Sentinela contra o seu DOMÍNIO PRÓPRIO (ex.: empresa.com.br), não contra a URL de páginas do provedor.
+- **Referências:** [ref](https://dmarc.org/overview/)
 
 ---
 

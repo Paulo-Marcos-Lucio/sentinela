@@ -74,3 +74,40 @@ def test_prefixo_host_valido_ok() -> None:
 def test_prefixo_secure_sem_flag_secure() -> None:
     ids = _run(("__Secure-sid=abc; HttpOnly; SameSite=Lax",))
     assert "COOKIE_PREFIXO_INVALIDO" in ids
+
+
+# --------------------------------------------------------------------------- #
+# Cookie de CSRF no padrão double-submit. Laravel/Axios, Angular, Django e csurf
+# entregam esse cookie legível por JS POR DESIGN — o JS precisa copiar o valor no
+# cabeçalho. Marcá-lo MÉDIA com o impacto "um XSS rouba a sessão" é duplamente
+# falso (não é sessão, e HttpOnly ali quebra a aplicação) e é o achado que o dev
+# do cliente refuta na reunião, levando junto a credibilidade dos corretos.
+# --------------------------------------------------------------------------- #
+def test_cookie_de_csrf_e_informativo_nao_medio() -> None:
+    for nome in ("XSRF-TOKEN", "csrftoken", "_csrf"):
+        ids = _run((f"{nome}=abc; Secure; SameSite=Lax",))
+        assert ids == {"COOKIE_CSRF_LEGIVEL_POR_JS"}, f"{nome} -> {ids}"
+
+
+def test_cookie_de_csrf_nao_apaga_o_achado_de_sessao_no_mesmo_site() -> None:
+    ids = _run(("XSRF-TOKEN=abc; Secure; SameSite=Lax", "PHPSESSID=x; Secure; SameSite=Lax"))
+    assert {"COOKIE_CSRF_LEGIVEL_POR_JS", "COOKIE_SEM_HTTPONLY"} <= ids
+
+
+def test_cookie_de_csrf_sem_secure_continua_sendo_achado_real() -> None:
+    # Sem Secure, o atacante na rede SOBRESCREVE o token (cookie tossing) e o
+    # double-submit passa a validar um valor escolhido por ele. Isto não é rebaixado.
+    ids = _run(("XSRF-TOKEN=abc; SameSite=Lax",))
+    assert "COOKIE_SEM_SECURE" in ids
+
+
+def test_cookie_de_sessao_com_csrf_no_nome_continua_medio() -> None:
+    # Desempate: `csrf_session_id` é sessão, não token de CSRF.
+    ids = _run(("csrf_session_id=abc; Secure; SameSite=Lax",))
+    assert "COOKIE_SEM_HTTPONLY" in ids
+    assert "COOKIE_CSRF_LEGIVEL_POR_JS" not in ids
+
+
+def test_access_token_continua_medio() -> None:
+    ids = _run(("access_token=abc; Secure; SameSite=Lax",))
+    assert "COOKIE_SEM_HTTPONLY" in ids

@@ -3,7 +3,8 @@
 ## Instalação rápida
 
 ```bash
-pip install -e ".[dev]"     # a partir do repositório clonado
+pipx install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"   # uso
+pip install -e ".[dev]"                                                 # desenvolvimento (repo clonado)
 sentinela --help
 ```
 
@@ -12,7 +13,7 @@ sentinela --help
 | Comando | Descrição |
 | --- | --- |
 | `sentinela scan <alvo>` | Executa a varredura de diagnóstico. |
-| `sentinela checagens` | Lista todas as checagens disponíveis. |
+| `sentinela regras` | Lista as checagens e o catálogo de achados (com OWASP/CWE). |
 | `sentinela versao` | Mostra a versão. |
 
 ## Exemplos
@@ -58,7 +59,7 @@ sentinela scan exemplo.com.br --autorizado
 ```yaml
 - name: Diagnóstico de segurança
   run: |
-    pip install sentinela-scan
+    pip install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git@<sha-de-40-hex>"
     sentinela scan https://staging.exemplo.com.br --falhar-em alta -f json -o -
 ```
 
@@ -68,4 +69,5 @@ sentinela scan exemplo.com.br --autorizado
 | --- | --- |
 | `0` | Varredura concluída (sem gatilho de `--falhar-em`). |
 | `1` | Achado igual ou acima do nível de `--falhar-em`. |
+| `2` | Erro de uso: alvo inválido, ID de checagem inexistente ou nível de `--falhar-em` desconhecido. |
 | `2` | Alvo inválido. |

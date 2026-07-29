@@ -10,6 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Edição do OWASP Top 10 contra a qual este mapeamento é feito. Vai como campo próprio no
+# JSON e no SARIF: um dashboard nunca deveria precisar fazer parsing da string do rótulo
+# para saber que `A03` de 2025 e `A03` de 2021 significam coisas OPOSTAS.
+OWASP_EDICAO = "2025"
+
 # Rótulos OWASP Top 10:2025 (owasp.org/Top10/2025/)
 A01 = "A01:2025 Broken Access Control"
 A02 = "A02:2025 Security Misconfiguration"
@@ -42,13 +47,19 @@ _TAGS: dict[str, Tag] = {
     "CSP_SEM_BASE_URI": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CLICKJACKING_SEM_PROTECAO": Tag(A02, "CWE-1021", "Improper Restriction of Rendered UI Layers"),
     "XXSS_PROTECTION_LEGADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    # Política entregue por <meta> em vez de cabeçalho: informativo (é legítimo), mas com
+    # limite real — via <meta> o navegador ignora frame-ancestors/sandbox/report-uri.
+    "POLITICA_VIA_META": Tag(A02, None, None),
     # HSTS / transporte -> A04 Cryptographic Failures
     "HSTS_AUSENTE": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "HSTS_FRACO": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "HSTS_SEM_SUBDOMINIOS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
+    "SEM_HTTPS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "SEM_REDIRECT_HTTPS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     # Cookies
     "COOKIE_SEM_HTTPONLY": Tag(A07, "CWE-1004", "Sensitive Cookie Without 'HttpOnly' Flag"),
+    "COOKIE_SEM_HTTPONLY_FUNCIONAL": Tag(A07, "CWE-1004", "Sensitive Cookie Without 'HttpOnly' Flag"),
+    "COOKIE_CSRF_LEGIVEL_POR_JS": Tag(None, None, None),
     "COOKIE_SEM_SECURE": Tag(A04, "CWE-614", "Sensitive Cookie Without 'Secure' Attribute"),
     "COOKIE_SEM_SAMESITE": Tag(A01, "CWE-352", "Cross-Site Request Forgery (CSRF)"),
     "COOKIE_SAMESITE_NONE_INSEGURO": Tag(
@@ -89,6 +100,8 @@ _TAGS: dict[str, Tag] = {
     "TLS_SEM_PFS": Tag(A04, "CWE-326", "Inadequate Encryption Strength"),
     "TLS_13_AUSENTE": Tag(A04, None, None),
     # DNS / e-mail
+    # Sem OWASP de propósito: é uma constatação de escopo (o DNS é do provedor), não uma falha.
+    "DNS_HOSPEDAGEM_GERENCIADA": Tag(None, None, None),
     "SPF_AUSENTE": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
     "SPF_PERMISSIVO": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),
     "DMARC_AUSENTE": Tag(A07, "CWE-290", "Authentication Bypass by Spoofing"),

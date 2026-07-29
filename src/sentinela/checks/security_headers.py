@@ -10,6 +10,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from sentinela.checks._util import truncate
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
 from sentinela.core.http import Probe
@@ -110,23 +111,78 @@ class SecurityHeadersChecker(Checker):
             return  # transporte falhou; o motor registra o erro à parte
 
         serves_https = probe.final_url.startswith("https://") or ctx.target.is_https
+        # Hospedagem estática (GitHub Pages, S3, storage) NÃO emite cabeçalho: a política
+        # vai em `<meta>` no HTML e o navegador a aplica. Ignorar isso rendia CSP_AUSENTE e
+        # REFERRER_POLICY_AUSENTE falsos em todo site desse tipo.
+        meta = _politicas_via_meta(probe.body_snippet)
 
         yield from self._check_hsts(probe, serves_https)
-        yield from self._check_csp(probe)
+        yield from self._check_csp(probe, meta.get("content-security-policy"))
         yield from self._check_frame_options(probe)
         for spec in _SIMPLE:
-            if not probe.has_header(spec.header):
-                yield Finding(
-                    id=spec.finding_id,
-                    title=spec.title,
-                    category=self.category,
-                    severity=spec.severity,
-                    description=f"O cabeçalho `{spec.header}` não foi encontrado na resposta.",
-                    impact=spec.impact,
-                    recommendation=spec.recommendation,
-                    references=spec.references,
-                )
+            if probe.has_header(spec.header):
+                continue
+            if spec.header.lower() in meta:
+                continue  # declarado via <meta> e honrado pelo navegador — não é ausência
+            yield Finding(
+                id=spec.finding_id,
+                title=spec.title,
+                category=self.category,
+                severity=spec.severity,
+                description=f"O cabeçalho `{spec.header}` não foi encontrado na resposta.",
+                impact=spec.impact,
+                recommendation=spec.recommendation,
+                references=spec.references,
+            )
         yield from self._check_xss_protection(probe)
+        yield from self._check_politica_via_meta(probe, meta)
+
+    def _check_politica_via_meta(self, probe: Probe, meta: dict[str, str]) -> Iterable[Finding]:
+        """Registra, de forma explícita, quais políticas vieram de `<meta>` e não de cabeçalho.
+
+        Não é uma falha: `<meta>` é a única via disponível em hospedagem estática. Mas a
+        entrega por `<meta>` tem limites REAIS (o navegador ignora `frame-ancestors`,
+        `sandbox` e `report-uri`), e o relatório precisa dizer isso — é o que separa
+        "protegido" de "parece protegido".
+        """
+        via_meta = [
+            nome
+            for cabecalho, nome in (
+                ("content-security-policy", "Content-Security-Policy"),
+                ("referrer-policy", "Referrer-Policy"),
+            )
+            if cabecalho in meta and not probe.has_header(cabecalho)
+        ]
+        if not via_meta:
+            return
+        csp_via_meta = "Content-Security-Policy" in via_meta
+        impacto = (
+            "Entregar a política por `<meta>` é legítimo e é a única opção em hospedagem "
+            "estática (GitHub Pages, S3, Cloud Storage): o navegador aplica a política. "
+        )
+        if csp_via_meta:
+            impacto += (
+                "PORÉM, numa CSP entregue por `<meta>` o navegador IGNORA as diretivas "
+                "`frame-ancestors`, `sandbox` e `report-uri` — elas só funcionam em cabeçalho. "
+                "Ou seja: proteção contra clickjacking via CSP e coleta de violações NÃO estão "
+                "ativas por esta via."
+            )
+        yield Finding(
+            id="POLITICA_VIA_META",
+            title="Política de segurança declarada via <meta>, não por cabeçalho HTTP",
+            category=self.category,
+            severity=Severity.INFO,
+            description=f"Declarada(s) em `<meta>` no HTML: {', '.join(via_meta)}.",
+            evidence=" · ".join(f"{n}: {truncate(meta[n.lower()])}" for n in via_meta),
+            impact=impacto,
+            recommendation=(
+                "Se você controla o servidor/CDN, prefira o cabeçalho HTTP (cobre as diretivas "
+                "que o `<meta>` não cobre e vale para respostas não-HTML). Em hospedagem "
+                "estática, use `X-Frame-Options`/`frame-ancestors` via CDN ou aceite "
+                "explicitamente essa limitação."
+            ),
+            references=(ref.MDN_CSP, ref.OWASP_SECURE_HEADERS),
+        )
 
     def _check_hsts(self, probe: Probe, serves_https: bool) -> Iterable[Finding]:
         value = probe.header("Strict-Transport-Security")
@@ -188,8 +244,8 @@ class SecurityHeadersChecker(Checker):
                 references=(ref.MDN_HSTS,),
             )
 
-    def _check_csp(self, probe: Probe) -> Iterable[Finding]:
-        value = probe.header("Content-Security-Policy")
+    def _check_csp(self, probe: Probe, csp_meta: str | None) -> Iterable[Finding]:
+        value = probe.header("Content-Security-Policy") or csp_meta
         if value is None:
             if probe.has_header("Content-Security-Policy-Report-Only"):
                 yield Finding(
@@ -232,8 +288,33 @@ class SecurityHeadersChecker(Checker):
             )
             return
 
-        lowered = value.lower()
-        fracos = [d for d in ("'unsafe-inline'", "'unsafe-eval'") if d in lowered]
+        directives = _parse_csp(value)
+        script = directives.get("script-src", directives.get("default-src", []))
+        # CSP3: na presença de 'strict-dynamic' o navegador IGNORA allowlists de host,
+        # esquemas e 'unsafe-inline' ao carregar script; na presença de nonce/hash (CSP2+)
+        # ele já ignora 'unsafe-inline'. Nas duas formas esses tokens são FALLBACK de
+        # compatibilidade — é exatamente a política que o Google recomenda em
+        # csp.withgoogle.com/docs/strict-csp. Acusá-los é recomendar o enfraquecimento
+        # de uma configuração correta.
+        nonce_ou_hash = any(t.startswith("'nonce-") or t.startswith("'sha") for t in script)
+        strict_dynamic = "'strict-dynamic'" in script
+
+        def _inline_ignorado(diretiva: str) -> bool:
+            if diretiva in ("script-src", "script-src-elem"):
+                return nonce_ou_hash or strict_dynamic
+            if diretiva == "default-src" and "script-src" not in directives:
+                # Sem script-src, o default-src É a fonte de script. Só nonce/hash faz o
+                # navegador ignorar 'unsafe-inline' também para o estilo inline que cai
+                # no mesmo fallback; 'strict-dynamic' não tem efeito sobre style-src.
+                return nonce_ou_hash
+            return False
+
+        fracos: list[str] = []
+        if "'unsafe-eval'" in value.lower():
+            fracos.append("'unsafe-eval'")  # 'strict-dynamic' NÃO neutraliza eval
+        if any(not _inline_ignorado(d) for d, fontes in directives.items() if "'unsafe-inline'" in fontes):
+            fracos.append("'unsafe-inline'")  # preserva o achado em style-src
+        fracos.sort()
         if fracos:
             yield Finding(
                 id="CSP_DIRETIVA_INSEGURA",
@@ -241,7 +322,7 @@ class SecurityHeadersChecker(Checker):
                 category=self.category,
                 severity=Severity.LOW,
                 description=f"A CSP presente usa {', '.join(fracos)}.",
-                evidence=_truncate(value),
+                evidence=truncate(value),
                 impact=(
                     "`unsafe-inline` e `unsafe-eval` anulam boa parte da proteção da "
                     "CSP contra XSS, permitindo scripts inline e avaliação dinâmica."
@@ -253,14 +334,15 @@ class SecurityHeadersChecker(Checker):
                 references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
             )
 
-        yield from self._check_csp_sources(value)
+        yield from self._check_csp_sources(value, directives, strict_dynamic)
 
-    def _check_csp_sources(self, value: str) -> Iterable[Finding]:
+    def _check_csp_sources(
+        self, value: str, directives: dict[str, list[str]], strict_dynamic: bool
+    ) -> Iterable[Finding]:
         """Análise profunda de diretivas (estilo CSP Evaluator): curinga em script-src,
         object-src/base-uri ausentes — bypasses clássicos que passam despercebidos."""
-        directives = _parse_csp(value)
         script = directives.get("script-src", directives.get("default-src"))
-        if script is not None:
+        if script is not None and not strict_dynamic:
             curingas = sorted(
                 {t for t in script if t in ("*", "http:", "https:", "data:", "http://*", "https://*")}
             )
@@ -271,7 +353,7 @@ class SecurityHeadersChecker(Checker):
                     category=self.category,
                     severity=Severity.MEDIUM,
                     description=f"A fonte de scripts da CSP inclui curinga(s): {', '.join(curingas)}.",
-                    evidence=_truncate(value),
+                    evidence=truncate(value),
                     impact=(
                         "Um curinga (`*`, `https:`, `data:`) em `script-src` permite carregar script "
                         "de praticamente qualquer origem, esvaziando a proteção da CSP contra XSS."
@@ -314,6 +396,9 @@ class SecurityHeadersChecker(Checker):
 
     def _check_frame_options(self, probe: Probe) -> Iterable[Finding]:
         xfo = probe.header("X-Frame-Options")
+        # DELIBERADO: só a CSP de CABEÇALHO conta aqui. Numa CSP entregue por
+        # `<meta http-equiv>` o navegador IGNORA `frame-ancestors` — aceitar a meta
+        # aqui transformaria um site desprotegido contra clickjacking em "sem achado".
         csp = (probe.header("Content-Security-Policy") or "").lower()
         if xfo is None and "frame-ancestors" not in csp:
             yield Finding(
@@ -356,6 +441,41 @@ class SecurityHeadersChecker(Checker):
 
 _MAX_AGE_RE = re.compile(r"max-age\s*=\s*(\d+)", re.IGNORECASE)
 
+# Teto de atributos por tag (mesma defesa de O(n²) do checks/content.py) e teto de HTML
+# varrido: as metas de política ficam no `<head>`, não no fim de uma página de 256 KB.
+_META_TAG_RE = re.compile(r"<meta\b[^>]{0,2048}>", re.IGNORECASE)
+_META_ATTR_RE = re.compile(r"""\b([a-z][a-z-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+_META_SCAN_CAP = 65_536
+
+
+def _politicas_via_meta(body: str) -> dict[str, str]:
+    """Políticas de segurança declaradas por `<meta>` no HTML, em ``{cabeçalho: valor}``.
+
+    Só reconhece o que o navegador REALMENTE aplica por essa via: `Content-Security-Policy`
+    (via ``http-equiv``) e `Referrer-Policy` (via ``name="referrer"``). Vale a primeira
+    ocorrência de cada uma, que é a que o navegador usa como política base.
+
+    A lista é fechada de propósito. HSTS, X-Frame-Options, X-Content-Type-Options,
+    Permissions-Policy e COOP declarados por `<meta>` são IGNORADOS pelo navegador —
+    aceitá-los aqui trocaria um falso positivo por um falso NEGATIVO, que é pior.
+    """
+    politicas: dict[str, str] = {}
+    for tag in _META_TAG_RE.findall(body[:_META_SCAN_CAP]):
+        atributos = {
+            m.group(1).lower(): (m.group(2) or m.group(3) or m.group(4) or "")
+            for m in _META_ATTR_RE.finditer(tag)
+        }
+        conteudo = atributos.get("content", "").strip()
+        if not conteudo:
+            continue
+        equiv = atributos.get("http-equiv", "").strip().lower()
+        nome = atributos.get("name", "").strip().lower()
+        if equiv == "content-security-policy":
+            politicas.setdefault("content-security-policy", conteudo)
+        elif nome == "referrer":
+            politicas.setdefault("referrer-policy", conteudo)
+    return politicas
+
 
 def _parse_max_age(value: str) -> int | None:
     match = _MAX_AGE_RE.search(value)
@@ -370,7 +490,3 @@ def _parse_csp(value: str) -> dict[str, list[str]]:
         if tokens:
             directives[tokens[0].lower()] = [t.lower() for t in tokens[1:]]
     return directives
-
-
-def _truncate(text: str, limit: int = 180) -> str:
-    return text if len(text) <= limit else text[: limit - 1] + "…"

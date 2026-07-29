@@ -113,7 +113,15 @@ def run_scan(
 
 
 def _probe_http(client: HttpClient, target: Target) -> Probe | None:
-    """Requisita a versão HTTP do host (sem redirecionar) p/ avaliar o upgrade a HTTPS."""
-    url = f"http://{target.host_for_url}/"
+    """Requisita a versão HTTP do host (sem redirecionar) p/ avaliar o upgrade a HTTPS.
+
+    Para alvo já em ``http://`` numa porta não-padrão, a sonda vai na PORTA DO ALVO.
+    Antes ela ia sempre na 80: o veredito de transporte de um app em ``:8080`` era
+    decidido por um serviço DIFERENTE na porta 80 do mesmo host (contaminação cruzada).
+    Para alvo ``https://``, a sonda continua na 80 de propósito — a pergunta é "a versão
+    em texto aberto deste host faz upgrade?", e o texto aberto mora na 80.
+    """
+    porta = f":{target.port}" if target.scheme == "http" and target.port != 80 else ""
+    url = f"http://{target.host_for_url}{porta}/"
     probe = client.request("GET", url, follow_redirects=False)
     return probe if probe.ok else None

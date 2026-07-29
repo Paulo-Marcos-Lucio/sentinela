@@ -25,27 +25,38 @@ from sentinela.core.http import Probe
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
+# Teto de caracteres varridos DENTRO de uma tag antes do atributo procurado.
+# Sem esse teto, `[^>]*?` num corpo hostil sem nenhum `>` degrada para O(n²): medido,
+# 256 KB de `<script ` (o teto de corpo do motor) custam ~84 s de CPU e ZERO achados.
+# Com o teto o custo cai para ~1,3 s e nenhum HTML legítimo é perdido — 2 KB de
+# atributos ANTES do `src` não ocorre em página real (ver CHANGELOG, F100).
+_ATTR_SCAN = 2048
+
 # Sub-recursos carregados por HTTP (conteúdo misto). Só elementos que BUSCAM
 # recurso — ``<a href>`` é navegação, não conteúdo misto, e fica de fora.
 _HTTP_RESOURCE_RE = re.compile(
-    r"<(?:script|img|iframe|source|embed|audio|video|track|object)\b[^>]*?"
+    rf"<(?:script|img|iframe|source|embed|audio|video|track|object)\b[^>]{{0,{_ATTR_SCAN}}}?"
     r"\b(?:src|data)\s*=\s*[\"']http://([^\"'>\s]+)",
     re.IGNORECASE,
 )
 _HTTP_LINK_RE = re.compile(
-    r"<link\b[^>]*?\bhref\s*=\s*[\"']http://([^\"'>\s]+)",
+    rf"<link\b[^>]{{0,{_ATTR_SCAN}}}?\bhref\s*=\s*[\"']http://([^\"'>\s]+)",
     re.IGNORECASE,
 )
 
-_SCRIPT_TAG_RE = re.compile(r"<script\b[^>]*>", re.IGNORECASE)
-_LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+_SCRIPT_TAG_RE = re.compile(rf"<script\b[^>]{{0,{_ATTR_SCAN}}}>", re.IGNORECASE)
+_LINK_TAG_RE = re.compile(rf"<link\b[^>]{{0,{_ATTR_SCAN}}}>", re.IGNORECASE)
 _SRC_ATTR_RE = re.compile(r"\bsrc\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _HREF_ATTR_RE = re.compile(r"\bhref\s*=\s*[\"']([^\"']+)[\"']", re.IGNORECASE)
 _REL_STYLESHEET_RE = re.compile(r"\brel\s*=\s*[\"'][^\"']*\bstylesheet\b", re.IGNORECASE)
 _INTEGRITY_RE = re.compile(r"\bintegrity\s*=", re.IGNORECASE)
 
-_FORM_ACTION_HTTP_RE = re.compile(r"<form\b[^>]*?\baction\s*=\s*[\"']http://([^\"'>\s]+)", re.IGNORECASE)
-_PASSWORD_INPUT_RE = re.compile(r"<input\b[^>]*?\btype\s*=\s*[\"']password[\"']", re.IGNORECASE)
+_FORM_ACTION_HTTP_RE = re.compile(
+    rf"<form\b[^>]{{0,{_ATTR_SCAN}}}?\baction\s*=\s*[\"']http://([^\"'>\s]+)", re.IGNORECASE
+)
+_PASSWORD_INPUT_RE = re.compile(
+    rf"<input\b[^>]{{0,{_ATTR_SCAN}}}?\btype\s*=\s*[\"']password[\"']", re.IGNORECASE
+)
 
 _MAX_EVIDENCIA = 5
 

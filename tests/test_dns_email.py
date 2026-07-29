@@ -7,7 +7,8 @@ import pytest
 
 import sentinela.checks.dns_email as de
 from conftest import make_context, make_target
-from sentinela.checks.dns_email import DnsEmailChecker, _is_ip
+from sentinela.checks._util import is_ip, registrable
+from sentinela.checks.dns_email import DnsEmailChecker
 
 
 class FakeResolver:
@@ -47,8 +48,8 @@ def _run(target_host: str = "example.com"):
 
 
 def test_is_ip() -> None:
-    assert _is_ip("1.2.3.4")
-    assert not _is_ip("example.com")
+    assert is_ip("1.2.3.4")
+    assert not is_ip("example.com")
 
 
 def test_ip_puro_nao_gera_achados(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,6 +127,48 @@ def test_provider_hosted_skips_email_checks(monkeypatch: pytest.MonkeyPatch) -> 
     assert "DNS_HOSPEDAGEM_GERENCIADA" in ids
     assert "DMARC_AUSENTE" not in ids
     assert "SPF_AUSENTE" not in ids
+
+
+# --------------------------------------------------------------------------- #
+# ESCOPO. Sem a seção privada da PSL, `cliente.blogspot.com` resolvia para
+# `blogspot.com` e a ferramenta consultava o SPF/DMARC/CAA do PROVEDOR, atribuindo o
+# achado ao cliente errado. `empresa.br.com` (revenda de domínio) resolvia para
+# `br.com` — pior ainda, porque ali o cliente controla a zona de verdade.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("host", "esperado"),
+    [
+        ("paulo.github.io", "paulo.github.io"),
+        ("cliente.blogspot.com", "cliente.blogspot.com"),
+        ("meu-bucket.s3.amazonaws.com", "meu-bucket.s3.amazonaws.com"),
+        ("loja.myshopify.com", "loja.myshopify.com"),
+        ("empresa.br.com", "empresa.br.com"),  # revenda: o cliente É o dono da zona
+        ("www.empresa.com.br", "empresa.com.br"),  # TLD composto comum continua certo
+    ],
+)
+def test_dominio_registravel_nao_sobe_para_o_provedor(host: str, esperado: str) -> None:
+    assert registrable(host) == esperado
+
+
+def test_dominio_de_revenda_continua_recebendo_checagem_de_email(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # `br.com`/`uk.com`/`us.com` estão na seção PRIVADA da PSL, mas quem está em
+    # `empresa.br.com` controla a própria zona e PODE publicar SPF/DMARC. Derivar o
+    # "pular checagens" de `is_private` silenciaria esse cliente — falso negativo.
+    _patch(monkeypatch, {}, FakeResolver())
+    ids = _run("empresa.br.com")
+    assert "DNS_HOSPEDAGEM_GERENCIADA" not in ids
+    assert {"SPF_AUSENTE", "DMARC_AUSENTE"} <= ids
+
+
+def test_hospedagem_gerenciada_nomeia_o_host_do_cliente_nao_o_do_provedor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch(monkeypatch, {}, FakeResolver())
+    ctx = make_context(target=make_target("https://paulo.github.io/"))
+    achado = next(f for f in DnsEmailChecker().run(ctx) if f.id == "DNS_HOSPEDAGEM_GERENCIADA")
+    assert "paulo.github.io" in achado.description
 
 
 def test_mta_sts_e_tls_rpt_ausentes_quando_ha_mx(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -2,11 +2,31 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 from sentinela.core.models import Finding, ScanResult, Severity
 from sentinela.knowledge.mapping import tag_for
 from sentinela.report._shared import grouped_by_category, ordered_counts, score_of
+
+_CRASES_RE = re.compile(r"`+")
+
+
+def _code_span(texto: str) -> str:
+    """Embrulha ``texto`` num code span de Markdown SEM alterar um byte do conteúdo.
+
+    A evidência vem do alvo e pode conter crase. Com a cerca fixa de uma crase, um valor
+    como ``sid` <img src=x onerror=alert(1)> `fim`` ESCAPA do span e vira HTML quando o
+    .md é renderizado por um terceiro (GitHub, wiki do cliente). Reescrever as crases
+    resolveria o escape, mas ADULTERARIA a evidência — o pecado que esta ferramenta
+    existe para não cometer. A regra do CommonMark permite as duas coisas: a cerca só
+    precisa ser maior que a maior sequência de crases do conteúdo.
+    """
+    maior = max((len(m.group()) for m in _CRASES_RE.finditer(texto)), default=0)
+    cerca = "`" * (maior + 1)
+    espaco = " " if texto.startswith("`") or texto.endswith("`") else ""
+    return f"{cerca}{espaco}{texto}{espaco}{cerca}"
+
 
 _SEV_EMOJI = {
     Severity.CRITICAL: "🔴",
@@ -100,7 +120,7 @@ def _render_finding(a: Callable[[str], None], finding: Finding) -> None:
     a(finding.description)
     a("")
     if finding.evidence:
-        a(f"- **Evidência:** `{finding.evidence}`")
+        a(f"- **Evidência:** {_code_span(finding.evidence)}")
     if finding.impact:
         a(f"- **Impacto:** {finding.impact}")
     a(f"- **Recomendação:** {finding.recommendation}")

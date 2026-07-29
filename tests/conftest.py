@@ -52,6 +52,10 @@ class FakeClient:
         *,
         headers: dict[str, str] | None = None,
         follow_redirects: bool = True,
+        # Precisa aceitar `max_body_bytes` para poder substituir o HttpClient DENTRO do
+        # motor (o `run_scan` passa esse argumento na coleta primária). Sem ele, um teste
+        # de motor "com cliente falso" explodia e acabava indo à internet de verdade.
+        max_body_bytes: int | None = None,
     ) -> Probe:
         self.calls.append((method, url, headers))
         if self.handler is not None:
@@ -60,8 +64,17 @@ class FakeClient:
                 return resposta
         return self.default
 
-    def get(self, url: str, *, headers: dict[str, str] | None = None) -> Probe:
-        return self.request("GET", url, headers=headers)
+    def get(self, url: str, **kwargs: object) -> Probe:
+        return self.request("GET", url, **kwargs)  # type: ignore[arg-type]
+
+    def close(self) -> None:
+        return
+
+    def __enter__(self) -> FakeClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return
 
 
 def make_context(

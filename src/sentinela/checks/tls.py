@@ -10,7 +10,6 @@ de assinatura obsoleto. Tudo defensivo: qualquer erro inesperado resulta em
 from __future__ import annotations
 
 import contextlib
-import ipaddress
 import socket
 import ssl
 from collections.abc import Iterable
@@ -20,6 +19,7 @@ from datetime import datetime, timezone
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import rsa
 
+from sentinela.checks._util import is_ip, truncate
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
 from sentinela.core.models import Category, Finding, Severity
@@ -43,20 +43,18 @@ class TlsChecker(Checker):
 
         # As conexões TLS são independentes → em paralelo, evitando um host lento
         # transformar 4×timeout em ~40s (o que travaria uma demo).
-        is_ip = _is_ip(host)
+        alvo_e_ip = is_ip(host)
         # Honra o --timeout do operador (agilidade de demo) mantendo o teto de 6s por handshake.
         timeout = min(ctx.config.timeout, _HANDSHAKE_TIMEOUT)
-        with ThreadPoolExecutor(max_workers=4) as pool:
+        with ThreadPoolExecutor(max_workers=3) as pool:
             cert_future = pool.submit(_fetch_certificate, host, port, timeout)
             # Alvo IP puro: a validação de cadeia por hostname não se aplica (o navegador
             # casaria contra IP SAN); a checagem de hostname abaixo já cobre o IP SAN.
-            trust_future = None if is_ip else pool.submit(_trust_error, host, port, timeout)
+            trust_future = None if alvo_e_ip else pool.submit(_trust_error, host, port, timeout)
             legacy_future = pool.submit(_accepts_legacy_tls, host, port, timeout)
-            caps_future = pool.submit(_tls_capabilities, host, port, timeout)
-            der = cert_future.result()
+            der, tls_version, tls_cipher = cert_future.result()
             trust_error = trust_future.result() if trust_future is not None else None
             legados = legacy_future.result()
-            tls_version, tls_cipher = caps_future.result()
 
         if der is None:
             return  # sem endpoint TLS acessível — não é papel desta checagem relatar
@@ -120,7 +118,7 @@ class TlsChecker(Checker):
             )
 
     def _check_hostname(self, cert: x509.Certificate, host: str) -> Iterable[Finding]:
-        if _is_ip(host):
+        if is_ip(host):
             ip_sans = _san_ip_names(cert)
             if ip_sans and host not in ip_sans:
                 yield Finding(
@@ -257,8 +255,19 @@ class TlsChecker(Checker):
 # --------------------------------------------------------------------------- #
 # Funções auxiliares de baixo nível
 # --------------------------------------------------------------------------- #
-def _fetch_certificate(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> bytes | None:
-    """Obtém o certificado do servidor mesmo que não seja confiável/expirado."""
+def _fetch_certificate(
+    host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT
+) -> tuple[bytes | None, str | None, str | None]:
+    """Certificado, versão e cifra negociadas — tudo de UM handshake padrão.
+
+    Devolve ``(der, versão, cifra)``, ex.: ``(b"...", "TLSv1.3", "TLS_AES_256_GCM_SHA384")``,
+    ou ``(None, None, None)`` se o handshake falhar. O certificado é obtido mesmo que não
+    seja confiável ou esteja expirado (a validação tem checagem dedicada).
+
+    Antes eram DUAS conexões: uma lia `getpeercert()` e outra lia `version()`/`cipher()`
+    do mesmo contexto SSL, byte a byte idêntico. Eram 5 handshakes por alvo; agora são 4
+    — menos pegada no log de um cliente que contratou uma varredura não-intrusiva.
+    """
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
@@ -267,9 +276,10 @@ def _fetch_certificate(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT
             socket.create_connection((host, port), timeout=timeout) as sock,
             context.wrap_socket(sock, server_hostname=host) as tls,
         ):
-            return tls.getpeercert(binary_form=True)
+            cipher = tls.cipher()
+            return tls.getpeercert(binary_form=True), tls.version(), (cipher[0] if cipher else None)
     except (OSError, ssl.SSLError):
-        return None
+        return None, None, None
 
 
 def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> str | None:
@@ -288,32 +298,9 @@ def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> s
         # Expiração e hostname divergente já têm checagens dedicadas — não duplicar.
         if code in (9, 10) or "expired" in msg or "hostname mismatch" in msg or "not valid for" in msg:
             return None
-        return _short(str(exc))
+        return truncate(str(exc), 160)
     except (OSError, ssl.SSLError):
         return None
-
-
-def _tls_capabilities(
-    host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT
-) -> tuple[str | None, str | None]:
-    """Versão e cifra negociadas num handshake PADRÃO (cliente moderno, até TLS 1.3).
-
-    Retorna ``(versão, cifra)`` — ex.: ``("TLSv1.3", "TLS_AES_256_GCM_SHA384")`` — ou
-    ``(None, None)`` se o handshake falhar. Um cliente 1.3-capaz que acaba em 1.2 indica que
-    o servidor não oferece 1.3; a cifra 1.2 revela a presença de forward secrecy.
-    """
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    try:
-        with (
-            socket.create_connection((host, port), timeout=timeout) as sock,
-            context.wrap_socket(sock, server_hostname=host) as tls,
-        ):
-            cipher = tls.cipher()
-            return tls.version(), (cipher[0] if cipher else None)
-    except (OSError, ssl.SSLError):
-        return None, None
 
 
 def _accepts_legacy_tls(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> list[str]:
@@ -360,14 +347,6 @@ def _not_valid_after(cert: x509.Certificate) -> datetime:
     return naive.replace(tzinfo=timezone.utc)
 
 
-def _is_ip(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
-        return True
-    except ValueError:
-        return False
-
-
 def _san_dns_names(cert: x509.Certificate) -> list[str]:
     try:
         ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
@@ -396,8 +375,3 @@ def _hostname_matches(host: str, patterns: list[str]) -> bool:
             if host.endswith(suffix) and host[: -len(suffix)].count(".") == 0 and host != suffix[1:]:
                 return True
     return False
-
-
-def _short(text: str, limit: int = 160) -> str:
-    text = " ".join(text.split())
-    return text if len(text) <= limit else text[: limit - 1] + "…"

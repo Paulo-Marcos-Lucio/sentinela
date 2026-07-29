@@ -10,13 +10,13 @@ lint:  ## Roda o linter (ruff)
 	ruff check .
 
 format:  ## Formata o código (ruff format)
-	ruff format src tests
+	ruff format .
 
 typecheck:  ## Verifica tipos (mypy)
 	mypy src
 
-test:  ## Roda os testes com cobertura
-	pytest --cov=sentinela --cov-report=term-missing
+test:  ## Roda os testes com cobertura (opções e portão vêm do pyproject.toml)
+	pytest
 
 check: lint typecheck test  ## Roda todo o portão de qualidade (lint + tipos + testes)
 

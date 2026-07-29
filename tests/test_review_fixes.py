@@ -106,19 +106,45 @@ def test_action_plan_prioritizes_medium_plus() -> None:
     assert all(int(f.severity) >= int(Severity.MEDIUM) for f in prio)
 
 
-def test_scan_runs_checks_in_parallel_and_completes() -> None:
-    # A paralelização não pode perder checagens nem achados (ordem preservada).
-    from conftest import make_target
+def test_scan_runs_checks_in_parallel_and_completes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A paralelização não pode perder checagem nem achado, e a ordem é preservada.
+
+    Este teste ia à INTERNET (2 conexões a example.com por execução, em 3 versões de
+    Python no CI) e a única asserção era vácua: `"cookies" in result.checks_run` é
+    verdadeiro mesmo sem rede nenhuma, com a varredura toda quebrada. Agora o motor real
+    roda contra um cliente falso — offline, determinístico, e afirmando o que promete.
+    """
+    from conftest import FakeClient, make_probe, make_target
+    from sentinela.core import engine
     from sentinela.core.config import ScanConfig
     from sentinela.core.engine import run_scan
+    from sentinela.core.registry import ALL_CHECKERS
 
-    calls: list[str] = []
+    probe = make_probe(
+        headers={"Server": "nginx/1.18.0"},
+        set_cookies=("PHPSESSID=abc",),
+        final_url="https://example.com/",
+    )
+    monkeypatch.setattr(engine, "HttpClient", lambda **_kw: FakeClient(default=probe))
+
+    esperados = ["security-headers", "cookies", "info-disclosure"]
+    chamadas: list[str] = []
     result = run_scan(
         make_target("https://example.com/"),
-        ScanConfig(only=frozenset({"cookies"})),
-        on_check=lambda cid, _n: calls.append(cid),
+        ScanConfig(only=frozenset(esperados)),
+        on_check=lambda cid, _n: chamadas.append(cid),
     )
-    assert "cookies" in result.checks_run
+
+    # Ordem de ALL_CHECKERS preservada apesar do paralelismo (pool.map garante isso).
+    ordem = [c.id for c in ALL_CHECKERS if c.id in esperados]
+    assert result.checks_run == ordem
+    assert sorted(chamadas) == sorted(ordem)
+    assert not result.errors
+    # E os achados de checagens DIFERENTES chegam todos ao resultado.
+    ids = {f.id for f in result.findings}
+    assert "CSP_AUSENTE" in ids  # security-headers
+    assert "COOKIE_SEM_HTTPONLY" in ids  # cookies
+    assert "VERSAO_STACK_EXPOSTA" in ids  # info-disclosure
 
 
 def test_every_finding_has_a_plain_explanation() -> None:
@@ -128,3 +154,55 @@ def test_every_finding_has_a_plain_explanation() -> None:
 
     faltando = [fid for fid in mapping._TAGS if plain_for(fid) is None]
     assert not faltando, f"achados sem explicação de leigo: {faltando}"
+
+
+# --------------------------------------------------------------------------- #
+# Portões de catálogo. As duas checagens abaixo são BIDIRECIONAIS de propósito: a
+# original só verificava `_TAGS ⊆ _PLAIN`, a direção que NÃO pega o buraco real —
+# um achado novo emitido no código sem entrada nas tabelas de conhecimento sai no
+# relatório do cliente com `"owasp": null, "cwe": null`. Aconteceu com dois IDs.
+# --------------------------------------------------------------------------- #
+def _ids_emitidos_pelo_codigo() -> set[str]:
+    """Extrai por AST todo `Finding(id="...")` construído em `src/sentinela/`."""
+    import ast
+    import pathlib
+
+    raiz = pathlib.Path(__file__).resolve().parent.parent / "src" / "sentinela"
+    ids: set[str] = set()
+    for arquivo in raiz.rglob("*.py"):
+        arvore = ast.parse(arquivo.read_text(encoding="utf-8"))
+        for no in ast.walk(arvore):
+            if not (isinstance(no, ast.Call) and isinstance(no.func, ast.Name)):
+                continue
+            if no.func.id != "Finding":
+                continue
+            for kw in no.keywords:
+                if kw.arg == "id" and isinstance(kw.value, ast.Constant):
+                    ids.add(str(kw.value.value))
+    return ids
+
+
+def test_todo_achado_emitido_tem_taxonomia_e_explicacao() -> None:
+    from sentinela.knowledge import mapping
+    from sentinela.knowledge.plain import plain_for
+
+    emitidos = _ids_emitidos_pelo_codigo()
+    assert len(emitidos) > 50, "o extrator por AST parou de achar os Findings"
+    assert not (emitidos - set(mapping._TAGS)), "achado emitido sem entrada em mapping._TAGS"
+    assert not {fid for fid in emitidos if plain_for(fid) is None}, "achado emitido sem plain"
+
+
+def test_todo_achado_catalogado_tem_ao_menos_um_caso_positivo_nos_testes() -> None:
+    """Um ID sem caso positivo é um ramo que pode ser apagado sem a suíte reagir.
+
+    Sete IDs eram órfãos — entre eles CERT_NAO_CONFIAVEL, TLS_PROTOCOLO_LEGADO e os dois
+    ramos de HSTS fraco, achados que a ferramenta encontra em campo o tempo todo.
+    """
+    import pathlib
+
+    from sentinela.knowledge import mapping
+
+    testes = pathlib.Path(__file__).resolve().parent
+    texto = "\n".join(a.read_text(encoding="utf-8") for a in testes.glob("test_*.py"))
+    orfaos = sorted(fid for fid in mapping._TAGS if fid not in texto)
+    assert not orfaos, f"IDs catalogados sem nenhum caso de teste: {orfaos}"

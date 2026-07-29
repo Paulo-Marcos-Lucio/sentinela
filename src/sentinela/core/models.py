@@ -124,6 +124,14 @@ class Finding:
     impact: str = ""
     evidence: str | None = None
     references: tuple[str, ...] = ()
+    subject: str | None = None
+    """Ativo específico a que este achado se refere (ex.: o subdomínio), quando a mesma
+    checagem pode emitir VÁRIAS instâncias do mesmo ``id`` numa varredura.
+
+    É o que dá identidade de INSTÂNCIA no SARIF: sem ele, três subdomain takeovers
+    distintos declaravam o mesmo ``partialFingerprints`` e o GitHub os fundia num alerta
+    só — o cliente corrigia um e achava que tinha acabado.
+    """
 
     def __post_init__(self) -> None:
         if not self.id:

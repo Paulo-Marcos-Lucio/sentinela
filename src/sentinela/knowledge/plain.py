@@ -74,6 +74,12 @@ _PLAIN: dict[str, str] = {
         "novos problemas) — como um alarme obsoleto que dispara sozinho. O certo é removê-la e "
         "confiar na CSP."
     ),
+    "POLITICA_VIA_META": (
+        "As regras de segurança estão escritas num cartaz DENTRO da loja, não na porta de entrada. "
+        "O navegador lê e obedece a maior parte delas — mas algumas (como 'ninguém pode colocar "
+        "minha loja dentro de uma vitrine falsa') só valem se estiverem na porta. É o normal em "
+        "hospedagem estática; só é preciso saber o que fica de fora."
+    ),
     # --- HSTS / transporte (o cadeado da porta) ---
     "HSTS_AUSENTE": (
         "Seu site tem o cadeado (HTTPS), mas não OBRIGA o navegador a usá-lo sempre. É ter a porta "
@@ -88,6 +94,11 @@ _PLAIN: dict[str, str] = {
         "A regra do cadeado protege o site principal, mas não os subdomínios (loja., blog.) — "
         "deixando essas portas laterais desprotegidas."
     ),
+    "SEM_HTTPS": (
+        "A loja está sem cadeado na porta: tudo que entra e sai — inclusive senha digitada — "
+        "viaja num envelope aberto que qualquer um no caminho lê e pode TROCAR. Hoje o "
+        "certificado é gratuito; é o primeiro item a resolver, antes de qualquer outro."
+    ),
     "SEM_REDIRECT_HTTPS": (
         "Quem digita o endereço sem 'https' continua numa conexão sem cadeado, em texto aberto — "
         "como enviar uma carta sem envelope, que qualquer um no caminho lê. O certo é levar todo "
@@ -101,6 +112,11 @@ _PLAIN: dict[str, str] = {
     "COOKIE_SEM_HTTPONLY_FUNCIONAL": (
         "Alguns cookies (de analytics/preferências) podem ser lidos por scripts — o que é normal se "
         "não carregam login. Só vale confirmar que nenhum deles é de sessão."
+    ),
+    "COOKIE_CSRF_LEGIVEL_POR_JS": (
+        "Esse cookie é uma 'senha de conferência' contra golpe de formulário, e o próprio site "
+        "precisa lê-la para conferir — então ela ser legível é o esperado, não uma falha. Ela não "
+        "é a pulseira de identificação do cliente: quem a copia não entra na conta de ninguém."
     ),
     "COOKIE_SEM_SECURE": (
         "A 'pulseira' do usuário pode trafegar por uma conexão sem cadeado, onde alguém na mesma "

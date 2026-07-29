@@ -15,7 +15,6 @@ serviço externo + resolve muitos nomes).
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -23,15 +22,14 @@ from dataclasses import dataclass
 
 import dns.exception
 import dns.resolver
-import tldextract
 
+from sentinela.checks._util import is_ip, is_provider_hosted, registrable
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
 from sentinela.core.discovery import discover_subdomains
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
-_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
 _DNS_TIMEOUT = 5.0
 _MAX_CHECAR = 120  # limita a resolução de CNAME (o trabalho pesado) aos N primeiros
 
@@ -145,9 +143,9 @@ class SubdomainTakeoverChecker(Checker):
         if not ctx.config.discover:
             return
         host = ctx.target.host
-        if _is_ip(host):
+        if is_ip(host):
             return
-        domain = self._registrable(host)
+        domain = self._escopo(host)
         if not domain:
             return
 
@@ -167,8 +165,12 @@ class SubdomainTakeoverChecker(Checker):
         amostra = subdominios[:15]
         resto = f" (+{len(subdominios) - len(amostra)} outros)" if len(subdominios) > len(amostra) else ""
         return Finding(
+            # Título CONSTANTE de propósito: a contagem muda a cada varredura e, no título,
+            # faria o SARIF fechar o alerta antigo e abrir um novo sempre que um subdomínio
+            # nascesse. O número vive na descrição, onde é informação, não identidade.
             id="SUPERFICIE_SUBDOMINIOS",
-            title=f"Superfície: {len(subdominios)} subdomínio(s) descobertos",
+            title="Superfície: subdomínios descobertos por Certificate Transparency",
+            subject=domain,
             category=self.category,
             severity=Severity.INFO,
             description=(
@@ -211,6 +213,7 @@ class SubdomainTakeoverChecker(Checker):
             yield Finding(
                 id="SUBDOMAIN_TAKEOVER_POSSIVEL",
                 title=f"CNAME órfão a verificar: {sub}",
+                subject=sub,
                 category=self.category,
                 severity=Severity.INFO,
                 description=(
@@ -244,6 +247,7 @@ class SubdomainTakeoverChecker(Checker):
         return Finding(
             id="SUBDOMAIN_TAKEOVER",
             title=f"Subdomain takeover: {sub}",
+            subject=sub,
             category=self.category,
             severity=Severity.CRITICAL,
             description=(
@@ -264,17 +268,20 @@ class SubdomainTakeoverChecker(Checker):
             references=(ref.OWASP_WSTG_SUBDOMAIN,),
         )
 
-    def _registrable(self, host: str) -> str | None:
-        ext = _EXTRACT(host)
-        top = getattr(ext, "top_domain_under_public_suffix", None)
-        if top is not None:
-            return top or None
-        return ext.registered_domain or None
+    def _escopo(self, host: str) -> str | None:
+        """Domínio sob o qual a enumeração pode acontecer — NUNCA acima do autorizado.
 
-
-def _is_ip(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
-        return True
-    except ValueError:
-        return False
+        Esta é a barreira de escopo do checker. Sem ela, um alvo em plataforma gerenciada
+        fazia a ferramenta consultar o Certificate Transparency do PROVEDOR, disparar GETs
+        contra hosts de terceiros e emitir achado CRÍTICO sobre ativo alheio dentro do
+        relatório do cliente. `core.discovery._filtrar` já garante que todo nome descoberto
+        fica sob este domínio — corrigi-lo aqui corrige a enumeração E as requisições.
+        """
+        domain = registrable(host)
+        if not domain:
+            return None
+        if is_provider_hosted(host):
+            # Plataforma fora da seção privada da PSL (wpengine, zendesk, atlassian…):
+            # o registrável ainda seria o domínio do provedor. Fica no host autorizado.
+            return host.lower().rstrip(".")
+        return domain

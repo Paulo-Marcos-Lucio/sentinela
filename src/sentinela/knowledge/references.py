@@ -29,8 +29,6 @@ MDN_XFO = "https://developer.mozilla.org/docs/Web/HTTP/Headers/X-Frame-Options"
 MDN_REFERRER = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Referrer-Policy"
 MDN_PERMISSIONS = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Permissions-Policy"
 MDN_COOP = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Opener-Policy"
-MDN_COEP = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Embedder-Policy"
-MDN_CORP = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Cross-Origin-Resource-Policy"
 MDN_SETCOOKIE = "https://developer.mozilla.org/docs/Web/HTTP/Headers/Set-Cookie"
 MDN_CORS = "https://developer.mozilla.org/docs/Web/HTTP/CORS"
 MDN_SRI = "https://developer.mozilla.org/docs/Web/Security/Subresource_Integrity"
@@ -44,7 +42,6 @@ MOZILLA_SSL_CONFIG = "https://ssl-config.mozilla.org/"
 RFC_HSTS = "https://www.rfc-editor.org/rfc/rfc6797"
 RFC_TRACE = "https://www.rfc-editor.org/rfc/rfc9110#name-trace"
 RFC_SECURITY_TXT = "https://www.rfc-editor.org/rfc/rfc9116"
-RFC_TLS13 = "https://www.rfc-editor.org/rfc/rfc8446"
 
 # DNS / e-mail
 RFC_SPF = "https://www.rfc-editor.org/rfc/rfc7208"
@@ -65,7 +62,3 @@ OWASP_WSTG_SUBDOMAIN = (
     "4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/"
     "10-Test_for_Subdomain_Takeover"
 )
-
-# Brasil / regulatório
-LGPD = "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm"
-MARCO_CIVIL = "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2014/lei/l12965.htm"

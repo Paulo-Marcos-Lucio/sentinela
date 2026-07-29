@@ -7,46 +7,18 @@ corretamente domínios como ``empresa.com.br``.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from collections.abc import Iterable
 
 import dns.exception
 import dns.rdatatype
 import dns.resolver
-import tldextract
 
+from sentinela.checks._util import is_ip, is_provider_hosted, registrable
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
-
-# Extrator offline e determinístico (usa o snapshot embutido da PSL, sem rede).
-_EXTRACT = tldextract.TLDExtract(suffix_list_urls=())
-
-# Hospedagens gerenciadas (páginas estáticas/PaaS): o DONO do site NÃO controla o DNS do
-# apex nem envia e-mail por esse nome. SPF/DMARC/CAA/DNSSEC 'ausente' aqui é do provedor —
-# afirmá-lo contra o cliente é impreciso e não-acionável.
-_PROVIDER_HOSTED = frozenset(
-    {
-        "github.io",
-        "gitlab.io",
-        "netlify.app",
-        "vercel.app",
-        "herokuapp.com",
-        "pages.dev",
-        "web.app",
-        "firebaseapp.com",
-        "azurewebsites.net",
-        "onrender.com",
-        "surge.sh",
-        "readthedocs.io",
-        "bitbucket.io",
-        "workers.dev",
-        "fly.dev",
-        "render.com",
-    }
-)
 
 _DNS_TIMEOUT = 5.0
 
@@ -83,14 +55,14 @@ class DnsEmailChecker(Checker):
 
     def run(self, ctx: ScanContext) -> Iterable[Finding]:
         host = ctx.target.host
-        if _is_ip(host):
+        if is_ip(host):
             return  # alvo é IP puro; checagens de domínio não se aplicam
 
-        domain = self._registrable(host)
+        domain = registrable(host)
         if not domain:
             return
 
-        if self._is_provider_hosted(host):
+        if is_provider_hosted(host):
             yield Finding(
                 id="DNS_HOSPEDAGEM_GERENCIADA",
                 title="Domínio em hospedagem gerenciada (DNS/e-mail do provedor)",
@@ -123,18 +95,6 @@ class DnsEmailChecker(Checker):
         if self._has_mx(resolver, domain):
             yield from self._check_mta_sts(resolver, domain)
             yield from self._check_tls_rpt(resolver, domain)
-
-    def _registrable(self, host: str) -> str | None:
-        ext = _EXTRACT(host)
-        # `top_domain_under_public_suffix` é o nome novo; `registered_domain` é o legado.
-        top = getattr(ext, "top_domain_under_public_suffix", None)
-        if top is not None:
-            return top or None
-        return ext.registered_domain or None
-
-    def _is_provider_hosted(self, host: str) -> bool:
-        h = host.lower().rstrip(".")
-        return any(h == p or h.endswith("." + p) for p in _PROVIDER_HOSTED)
 
     def _check_spf(self, resolver: dns.resolver.Resolver, domain: str) -> Iterable[Finding]:
         txt = _txt_records(resolver, domain)
@@ -332,11 +292,3 @@ class DnsEmailChecker(Checker):
                 ),
                 references=(ref.RFC_TLS_RPT,),
             )
-
-
-def _is_ip(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
-        return True
-    except ValueError:
-        return False

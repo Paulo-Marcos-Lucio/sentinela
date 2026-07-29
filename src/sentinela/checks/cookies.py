@@ -44,6 +44,21 @@ _SESSION_HINTS = (
 )
 
 
+# Cookie de CSRF no padrão double-submit (Laravel/Axios `XSRF-TOKEN`, Django `csrftoken`,
+# Angular `XSRF-TOKEN`, csurf `_csrf`): o JavaScript PRECISA lê-lo para copiar o valor no
+# cabeçalho — marcá-lo HttpOnly QUEBRA a aplicação, e a doc do Django diz explicitamente
+# que HttpOnly ali "não oferece proteção prática". O que importa nesse cookie é Secure +
+# SameSite, e ambos já têm achado próprio e independente do nome.
+_CSRF_HINTS = ("csrf", "xsrf")
+# Desempate: um `csrf_session_id` é sessão, não token de CSRF.
+_SESSAO_FORTE = ("sess", "sid", "jwt")
+
+
+def _is_csrf_like(name: str) -> bool:
+    lowered = name.lower()
+    return any(h in lowered for h in _CSRF_HINTS) and not any(h in lowered for h in _SESSAO_FORTE)
+
+
 def _is_session_like(name: str) -> bool:
     lowered = name.lower()
     return any(hint in lowered for hint in _SESSION_HINTS)
@@ -105,7 +120,31 @@ class CookiesChecker(Checker):
         sem_samesite = [c.name for c in cookies if not c.same_site]
 
         if sem_httponly:
-            session_like = [n for n in sem_httponly if _is_session_like(n)]
+            # Três baldes, nesta ordem: CSRF (esperado), sessão/auth (grave), funcional.
+            csrf_like = [n for n in sem_httponly if _is_csrf_like(n)]
+            session_like = [n for n in sem_httponly if n not in csrf_like and _is_session_like(n)]
+            if csrf_like:
+                yield Finding(
+                    id="COOKIE_CSRF_LEGIVEL_POR_JS",
+                    title="Cookie de CSRF legível por JavaScript (esperado no padrão double-submit)",
+                    category=self.category,
+                    severity=Severity.INFO,
+                    description=f"Cookies com cara de token CSRF sem `HttpOnly`: {', '.join(csrf_like)}.",
+                    evidence=", ".join(csrf_like),
+                    impact=(
+                        "Um token de CSRF NÃO é a sessão: roubá-lo não sequestra sessão nenhuma. "
+                        "No padrão double-submit (Angular, Axios/Laravel, Django com AJAX) o "
+                        "JavaScript precisa ler esse cookie para copiar o valor no cabeçalho — "
+                        "marcá-lo `HttpOnly` quebra a aplicação. O que importa aqui é `Secure` "
+                        "(sem ele o atacante na rede SOBRESCREVE o token — cookie tossing) e "
+                        "`SameSite`; os dois têm achado próprio neste relatório."
+                    ),
+                    recommendation=(
+                        "Confirme que este cookie carrega apenas o token de CSRF (e não a sessão). "
+                        "Garanta `Secure` e `SameSite`; não force `HttpOnly` aqui."
+                    ),
+                    references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
+                )
             if session_like:
                 yield Finding(
                     id="COOKIE_SEM_HTTPONLY",
@@ -121,14 +160,15 @@ class CookiesChecker(Checker):
                     recommendation="Marque cookies de sessão/autenticação com `HttpOnly`.",
                     references=(ref.MDN_SETCOOKIE, ref.OWASP_COOKIES),
                 )
-            else:
+            funcionais = [n for n in sem_httponly if n not in csrf_like and n not in session_like]
+            if funcionais and not session_like:
                 yield Finding(
                     id="COOKIE_SEM_HTTPONLY_FUNCIONAL",
                     title="Cookie(s) sem HttpOnly (aparentemente funcionais)",
                     category=self.category,
                     severity=Severity.LOW,
-                    description=f"Cookies sem `HttpOnly`: {', '.join(sem_httponly)}.",
-                    evidence=", ".join(sem_httponly),
+                    description=f"Cookies sem `HttpOnly`: {', '.join(funcionais)}.",
+                    evidence=", ".join(funcionais),
                     impact=(
                         "HttpOnly protege cookies de SESSÃO contra roubo via XSS. Nenhum destes "
                         "tem nome de sessão/auth — se realmente forem funcionais (analytics, "

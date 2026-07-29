@@ -85,3 +85,34 @@ def test_cache_sensivel_com_nostore_ok() -> None:
 def test_cache_sem_senha_nao_gera_achado() -> None:
     ids = _run_headers("<html><body>página comum</body></html>", {})
     assert "CACHE_SENSIVEL_SEM_NOSTORE" not in ids
+
+
+# --------------------------------------------------------------------------- #
+# Orçamento de CPU contra alvo hostil. O modelo de ameaça da ferramenta é literalmente
+# "apontar para um alvo que pode não querer ser auditado". Um corpo de 256 KB (o teto
+# exato que o motor garante entregar) SEM nenhum `>` fazia cada `<script ` varrer até o
+# fim da string: O(n²), ~84 s de CPU medidos e ZERO achados — o operador não vê erro,
+# vê lentidão. O teto de 2048 caracteres por tag torna a busca linear.
+# --------------------------------------------------------------------------- #
+def test_corpo_hostil_de_256kb_nao_estoura_o_orcamento_de_cpu() -> None:
+    import time
+
+    from sentinela.core.engine import _PRIMARY_BODY_CAP
+
+    corpo = "<script " * (_PRIMARY_BODY_CAP // 8)
+    assert len(corpo) == _PRIMARY_BODY_CAP  # o payload é exatamente o teto do motor
+    inicio = time.perf_counter()
+    achados = _run(corpo)
+    decorrido = time.perf_counter() - inicio
+    assert achados == set()
+    assert decorrido < 3.0, f"ContentChecker levou {decorrido:.1f}s num corpo hostil de 256 KB"
+
+
+def test_menor_que_o_teto_de_atributos_continua_sendo_detectado() -> None:
+    # O teto não pode virar falso negativo em HTML legítimo com muitos atributos —
+    # inclusive com `<` DENTRO de valor de atributo, que é HTML válido e comum.
+    body = (
+        '<img alt="1 < 2" src="http://inseguro.tld/pixel.gif">'
+        '<script onload="if(a<b)f()" src="http://inseguro.tld/x.js"></script>'
+    )
+    assert "CONTEUDO_MISTO" in _run(body)

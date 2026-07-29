@@ -53,13 +53,20 @@ Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**
 
 Requer **Python 3.10+**.
 
+A Sentinela **não está publicada no PyPI**, então `pip install sentinela` NÃO instala esta
+ferramenta — esse nome pertence a outro projeto (um watchdog de sistema operacional). A
+instalação é direto do repositório:
+
 ```bash
-# a partir do código-fonte
+# via pipx (recomendado: ambiente isolado, comando global)
+pipx install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
+
+# ou via pip
+pip install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
+
+# a partir do código-fonte, para desenvolvimento (com ruff, mypy, pytest)
 git clone https://github.com/Paulo-Marcos-Lucio/sentinela.git
 cd sentinela
-pip install .
-
-# ou, para desenvolvimento (com ruff, mypy, pytest)
 pip install -e ".[dev]"
 ```
 
@@ -87,8 +94,14 @@ sentinela scan exemplo.com.br -f console -f markdown -f json
 # uso em CI/CD: falha o pipeline se houver achado de severidade alta ou superior
 sentinela scan exemplo.com.br --falhar-em alta
 
-# listar todas as checagens
-sentinela checagens
+# descobrir subdomínios via Certificate Transparency (passivo, mais lento)
+sentinela scan exemplo.com.br --descobrir
+
+# listar as checagens e o catálogo de achados
+sentinela regras
+
+# versão
+sentinela --version
 ```
 
 Principais opções do `scan`:
@@ -97,10 +110,23 @@ Principais opções do `scan`:
 | --- | --- |
 | `-f, --formato` | `console` (padrão), `markdown`, `html`, `json`, `sarif`. Repetível. |
 | `-o, --saida` | Arquivo de saída para um formato de arquivo. |
-| `--falhar-em` | `nenhum`/`baixa`/`media`/`alta`/`critica` — código de saída 1 para CI. |
-| `--timeout` | Timeout por requisição (padrão 15s). |
-| `--pular` / `--somente` | Filtra quais checagens rodam (por ID). |
+| `--falhar-em` / `--fail-on` | `nenhum`/`info`/`baixa`/`media`/`alta`/`critica` (ou `none`/`info`/`low`/`medium`/`high`/`critical`) — código de saída 1 para CI. Padrão: `alta`. |
+| `--timeout` | Timeout por requisição, em segundos (padrão 8). |
+| `--pular` / `--somente` | Filtra quais checagens rodam (por ID). ID inexistente → erro de uso (saída 2). |
 | `--perfil` | `completo` (padrão) roda tudo; `rapido` pula TLS, DNS/e-mail e robots.txt (triagem ágil). |
+| `--descobrir` | Enumera subdomínios via Certificate Transparency e checa subdomain takeover. Passivo, porém mais lento. |
+| `--sem-verificacao-tls` | **INSEGURO**: desabilita a validação de certificado nas conexões (sujeito a MITM). Os achados de TLS continuam sendo reportados. |
+
+**Códigos de saída:** `0` varredura concluída · `1` achado no nível de `--falhar-em` ou acima · `2` erro de uso (alvo inválido, ID de checagem inexistente, nível desconhecido).
+
+**Padrão de `--fail-on` na suíte** — os defaults NÃO são iguais, e isso é deliberado:
+
+| Ferramenta | Padrão | Por quê |
+| --- | --- | --- |
+| Sentinela | `alta` | Cabeçalho ausente é hardening; o gate fecha no que representa risco real. |
+| Guardião | `media` | Scanner de SEGREDO: a faixa média é onde moram CPF/CNPJ (LGPD) e strings de alta entropia. A consequência de uma credencial vazada é categoricamente pior — o gatilho tem que ser mais sensível. |
+| Chaveiro | `alta` | Análise de um token individual. |
+| Esteira | `alta` | Configuração de CI. |
 
 📄 **Veja um relatório real de exemplo:** [`docs/exemplo-relatorio.md`](docs/exemplo-relatorio.md)
 
@@ -149,7 +175,7 @@ Projeto em camadas, com cada checagem isolada e testável:
 src/sentinela/
 ├── core/          # modelos, motor, cliente HTTP, configuração, pontuação
 ├── checks/        # uma checagem por arquivo, todas herdando de Checker
-├── report/        # renderizadores: console (rich), markdown, html (jinja2), json
+├── report/        # renderizadores: console (rich), markdown, html (jinja2), json, sarif
 ├── knowledge/     # referências canônicas + taxonomia OWASP/CWE
 └── cli.py         # interface typer
 ```

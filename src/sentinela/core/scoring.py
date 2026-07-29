@@ -49,6 +49,29 @@ def _grade_for(value: int) -> str:
 # site bem operado. Ver auditoria de campo 2026-07-22.
 _CERT_QUEBRADO = frozenset({"CERT_EXPIRADO", "CERT_NAO_CONFIAVEL", "CERT_HOSTNAME_INVALIDO"})
 
+# Frase que acompanha o teto de CONCEITO — sem ela, "80/100 · conceito D" parece bug.
+_AVISO_TETO_CONCEITO = (
+    " O conceito está limitado por gravidade: a nota numérica mede higiene, o conceito "
+    "reprova pela presença de achado grave (como num exame prático — acerta 90% dos "
+    "pontos e reprova direto por avançar o sinal vermelho)."
+)
+
+
+def _teto_de_conceito(grade: str, findings: list[Finding]) -> str:
+    """Limita o CONCEITO pela pior severidade presente, sem tocar no VALOR.
+
+    Motivo: um `.env` de produção publicado na internet lia "conceito C" — 100 − 40 = 60.
+    O defeito não é a aritmética (que continua reconstruível à mão), é o RÓTULO. Tetar o
+    VALOR resolveria o rótulo mas achataria 16–21 pontos de faixa: o cliente que corrige
+    5 achados baixos não veria a nota mover, justamente no regime em que ele está pagando
+    para remediar. Tetar só o conceito dá a mesma garantia de produto de graça.
+    """
+    if any(f.severity is Severity.CRITICAL for f in findings):
+        return "F"
+    if any(f.severity is Severity.HIGH for f in findings) and grade in ("A", "B", "C"):
+        return "D"
+    return grade
+
 
 def compute_score(findings: list[Finding]) -> Score:
     """Calcula a nota subtraindo de 100 os pesos de cada achado.
@@ -58,6 +81,9 @@ def compute_score(findings: list[Finding]) -> Score:
     exceções TETAM a nota em F, porque penalidade linear inverteria o sinal:
     (1) alvo inacessível (não foi possível avaliar → a nota não pode ser boa);
     (2) falha de confiança no certificado (o navegador bloqueia o acesso).
+
+    Além disso, o CONCEITO (só ele, nunca o valor) é limitado pela pior severidade:
+    qualquer achado CRÍTICO reprova em F; qualquer achado ALTO limita o conceito a D.
     """
     penalty = sum(f.severity.weight for f in findings)
     value = max(0, 100 - penalty)
@@ -70,6 +96,8 @@ def compute_score(findings: list[Finding]) -> Score:
         grade = "F"
     else:
         grade = _grade_for(value)
+    grade_por_valor = grade
+    grade = _teto_de_conceito(grade, findings)
 
     if inacessivel:
         summary = (
@@ -108,5 +136,7 @@ def compute_score(findings: list[Finding]) -> Score:
                 "Sem achados críticos ou altos; há oportunidades de endurecimento "
                 "(hardening) de severidade média/baixa."
             )
+    if grade != grade_por_valor:
+        summary += _AVISO_TETO_CONCEITO
 
     return Score(value=value, grade=grade, summary=summary)

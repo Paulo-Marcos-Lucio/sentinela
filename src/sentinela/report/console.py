@@ -1,4 +1,12 @@
-"""Renderizador de terminal usando `rich`."""
+"""Renderizador de terminal usando `rich`.
+
+REGRA DO MÓDULO: todo valor controlado pelo ALVO (host, evidência, mensagem de erro de
+rede/TLS) entra como :class:`rich.text.Text`, nunca interpolado em string com markup.
+O markup do `rich` usa colchetes, e nome de cookie estilo array (`cart[items]`, comum em
+PHP/Rails) ou um `Server: [/]` de 5 bytes bastavam para, respectivamente, CORROMPER a
+evidência em silêncio (`cart[items]` virava `cart`) e DERRUBAR o relatório com
+``MarkupError`` depois de a varredura inteira já ter rodado.
+"""
 
 from __future__ import annotations
 
@@ -38,7 +46,7 @@ def render_console(result: ScanResult, console: Console | None = None) -> None:
     score = score_of(result)
 
     console.print()
-    console.rule(f"[bold]Sentinela[/] · {result.target.host}", style="green")
+    console.rule(Text.assemble(("Sentinela", "bold"), " · ", result.target.host), style="green")
     console.print()
 
     modo = "Intrusivo (autorizado)" if result.intrusive else "Não-intrusivo"
@@ -96,7 +104,10 @@ def render_console(result: ScanResult, console: Console | None = None) -> None:
     if result.errors:
         console.print("[dim]Observações de execução:[/]")
         for err in result.errors:
-            console.print(f"  [dim]• {err.check_id}: {err.message}[/]")
+            # err.message carrega texto de exceção de rede/TLS — string do servidor.
+            console.print(
+                Text.assemble(("  • ", "dim"), (f"{err.check_id}: ", "dim"), (err.message, "dim"))
+            )
         console.print()
 
 
@@ -113,8 +124,8 @@ def _render_finding(console: Console, finding: Finding) -> None:
         meta_bits.append(f"[dim]{tag.cwe}[/]")
     console.print("     " + " · ".join(meta_bits))
     if finding.evidence:
-        console.print(f"     [dim]evidência:[/] {finding.evidence}")
-    console.print(f"     [dim]→[/] {finding.recommendation}")
+        console.print(Text.assemble(("     evidência: ", "dim"), (finding.evidence, "")))
+    console.print(Text.assemble(("     → ", "dim"), (finding.recommendation, "")))
 
 
 def _grade_style(grade: str) -> str:

@@ -23,6 +23,30 @@ def test_cors_reflexao_com_credenciais() -> None:
     assert "CORS_REFLEXAO_COM_CREDENCIAIS" in ids
 
 
+def test_cors_curinga_com_credenciais() -> None:
+    # 2º ramo do checker: `*` + credentials. Sem este teste, apagar o ramo inteiro
+    # deixava a suíte verde e a varredura devolvia "nada encontrado".
+    client = FakeClient(
+        default=make_probe(
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+    )
+    ids = {f.id for f in CorsChecker().run(make_context(client=client))}
+    assert "CORS_CURINGA_COM_CREDENCIAIS" in ids
+
+
+def test_cors_reflexao_sem_credenciais() -> None:
+    # 3º ramo: reflete a origem, sem credenciais → LOW.
+    def handler(method, url, headers):
+        return make_probe(headers={"Access-Control-Allow-Origin": (headers or {}).get("Origin", "")})
+
+    ids = {f.id for f in CorsChecker().run(make_context(client=FakeClient(handler=handler)))}
+    assert ids == {"CORS_REFLEXAO_ORIGEM"}
+
+
 def test_cors_curinga_sem_credenciais_nao_gera_achado() -> None:
     client = FakeClient(default=make_probe(headers={"Access-Control-Allow-Origin": "*"}))
     ids = {f.id for f in CorsChecker().run(make_context(client=client))}

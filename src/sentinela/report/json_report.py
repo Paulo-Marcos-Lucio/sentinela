@@ -1,34 +1,52 @@
-"""Renderizador JSON — saída legível por máquina (integração CI/CD, dashboards)."""
+"""Renderizador JSON — saída legível por máquina (integração CI/CD, dashboards).
+
+Contrato `suite-appsec/1`, comum às quatro ferramentas da suíte: CHAVES e VALORES de
+identificador em inglês, TEXTO para humano em PT-BR. É a mesma regra que
+`core.models` documenta no topo — este relatório era o único lugar que a desrespeitava,
+emitindo chaves em português e severidades acentuadas (`"severidade": "Média"`), o que
+obrigava um consumidor a manter uma tabela de-para só para a Sentinela.
+
+`by_severity` traz SEMPRE as cinco chaves, inclusive zeradas: um dashboard que soma
+`by_severity["critical"]` não pode quebrar por ausência de chave num relatório limpo.
+"""
 
 from __future__ import annotations
 
 import json
 
 from sentinela.core.models import Finding, ScanResult
-from sentinela.knowledge.mapping import tag_for
-from sentinela.report._shared import ordered_counts, score_of
+from sentinela.knowledge.mapping import OWASP_EDICAO, tag_for
+from sentinela.report._shared import SEVERITY_ORDER, score_of
+
+SCHEMA = "suite-appsec/1"
 
 
 def render_json(result: ScanResult) -> str:
     score = score_of(result)
+    counts = result.counts_by_severity()
     payload = {
-        "ferramenta": "sentinela",
-        "versao": result.tool_version,
-        "alvo": {
+        "schema": SCHEMA,
+        "tool": "sentinela",
+        "version": result.tool_version,
+        "owasp_edition": OWASP_EDICAO,
+        "target": {
             "url": result.target.url,
             "host": result.target.host,
-            "porta": result.target.port,
-            "esquema": result.target.scheme,
+            "port": result.target.port,
+            "scheme": result.target.scheme,
         },
-        "modo": "intrusivo" if result.intrusive else "nao-intrusivo",
-        "iniciado_em": result.started_at.isoformat(),
-        "finalizado_em": result.finished_at.isoformat() if result.finished_at else None,
-        "duracao_segundos": round(result.duration_seconds, 2),
-        "checagens_executadas": result.checks_run,
-        "nota": {"valor": score.value, "conceito": score.grade, "resumo": score.summary},
-        "contagem_por_severidade": {sev.label: qtd for sev, qtd in ordered_counts(result)},
-        "achados": [_finding_dict(f) for f in result.sorted_findings()],
-        "erros": [{"checagem": e.check_id, "mensagem": e.message} for e in result.errors],
+        "mode": "intrusive" if result.intrusive else "non-intrusive",
+        "started_at": result.started_at.isoformat(),
+        "finished_at": result.finished_at.isoformat() if result.finished_at else None,
+        "duration_seconds": round(result.duration_seconds, 2),
+        "checks_run": result.checks_run,
+        "summary": {
+            "total": len(result.findings),
+            "by_severity": {sev.name.lower(): counts[sev] for sev in SEVERITY_ORDER},
+            "score": {"value": score.value, "grade": score.grade, "text": score.summary},
+        },
+        "findings": [_finding_dict(f) for f in result.sorted_findings()],
+        "errors": [{"check": e.check_id, "message": e.message} for e in result.errors],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
@@ -37,15 +55,20 @@ def _finding_dict(finding: Finding) -> dict[str, object]:
     tag = tag_for(finding.id)
     return {
         "id": finding.id,
-        "titulo": finding.title,
-        "categoria": finding.category.value,
-        "severidade": finding.severity.label,
-        "severidade_nivel": int(finding.severity),
+        "title": finding.title,
+        "category": finding.category.value,
+        # `severity` é identificador (EN, minúsculo); `severity_label` é o rótulo que o
+        # relatório humano exibe; `severity_rank` permite ordenar sem tabela de-para.
+        "severity": finding.severity.name.lower(),
+        "severity_label": finding.severity.label,
+        "severity_rank": int(finding.severity),
+        "subject": finding.subject,
         "owasp": tag.owasp if tag else None,
         "cwe": tag.cwe if tag else None,
-        "descricao": finding.description,
-        "evidencia": finding.evidence,
-        "impacto": finding.impact,
-        "recomendacao": finding.recommendation,
-        "referencias": list(finding.references),
+        "cwe_name": tag.cwe_name if tag else None,
+        "description": finding.description,
+        "evidence": finding.evidence,
+        "impact": finding.impact,
+        "recommendation": finding.recommendation,
+        "references": list(finding.references),
     }
