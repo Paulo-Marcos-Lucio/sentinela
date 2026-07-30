@@ -192,6 +192,24 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ---
 
+## 🔬 Qualidade de engenharia & método
+
+**Portões, medidos agora (não aspiração):** 313 testes · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 41 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+
+**Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
+
+**Arquitetura — o que está de fato no código:**
+- **Separação de responsabilidades:** detecção (`checks/`, uma checagem por arquivo) × taxonomia (`knowledge/`) × renderização (`report/`); a checagem recebe um `Probe` **imutável** e nunca fala com a rede direto — testável sem tocar a internet.
+- **Fonte única de verdade:** o mapa `finding.id → OWASP Top 10:2025 + CWE` vive num só módulo (`knowledge/mapping.py`), com a edição (`2025`) como campo próprio no JSON/SARIF — o consumidor não precisa fazer parsing de rótulo para saber que `A03:2025` ≠ `A03:2021`.
+- **Contrato de saída estável:** JSON no schema `suite-appsec/1` (chaves em EN, texto humano em PT-BR) e **SARIF 2.1.0** ingestável pela aba *Security* do GitHub, com `partialFingerprints` por instância (dois subdomain takeovers distintos não se fundem num alerta só).
+- **Tipos estritos + imutabilidade:** `Finding`, `Target`, `Probe` e `Tag` são `@dataclass(frozen=True, slots=True)`; severidade é `IntEnum` (ordena do mais grave ao menos grave sem lógica extra).
+
+**Cadeia de suprimentos do próprio repo:** as actions do CI são fixadas por **SHA** (uma tag `@v4` é ponteiro móvel), com `persist-credentials: false`, e o **Dependabot** faz a outra metade — 1 PR agrupado por mês para `github-actions` e `pip`. É a mesma régua que a Esteira, a ferramenta de CI desta suíte, cobra de qualquer cliente.
+
+**PT-BR é decisão consciente, não descuido:** identificador de código em inglês (padrão de mercado); todo texto destinado a humano — teste, achado, doc — em PT-BR, porque quem lê o relatório final é o cliente. A consistência do contrato é testada.
+
+---
+
 ## ⚖️ Uso ético e autorização
 
 **Esta ferramenta é para avaliação de sistemas que você possui ou tem autorização explícita e por escrito para testar.**
