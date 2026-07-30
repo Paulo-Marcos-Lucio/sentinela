@@ -16,6 +16,10 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   parâmetro refletido sem escape como superfície de XSS (`REFLEXAO_DE_PARAMETRO`, A05/CWE-79) e
   dado sensível na query string (`DADO_SENSIVEL_NA_URL`, A07/CWE-598). É honesta sobre a fronteira:
   sinaliza a *superfície*; a CONFIRMAÇÃO ativa (provar SQLi/XSS com payload) é da edição Pro.
+  A extração de formulários é feita por **regex de escaneamento limitado** (teto por tag, O(n)) —
+  não pelo `HTMLParser` da stdlib, que é super-linear num `<script` sem fechamento e travava a
+  varredura num corpo hostil de 256 KB (mesma classe de DoS que o F100 matou em `content.py`;
+  descoberto por bateria de campo, coberto por teste que cronometra a regressão).
 
 ### ⚠️ Mudanças incompatíveis
 - **Contrato do relatório JSON** (`-f json`): as chaves passam para inglês, seguindo o schema

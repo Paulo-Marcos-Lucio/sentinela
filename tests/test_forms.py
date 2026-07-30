@@ -7,9 +7,10 @@ contrato — o checker sinaliza superfície, nunca afirma exploração.
 
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable
 
-from sentinela.checks.forms import FormsChecker
+from sentinela.checks.forms import FormsChecker, _coletar_forms
 from sentinela.core.config import ScanConfig
 from sentinela.core.context import ScanContext
 from sentinela.core.http import Probe
@@ -130,3 +131,27 @@ def test_checker_registrado_no_pipeline() -> None:
 
     assert FormsChecker in ALL_CHECKERS
     assert FormsChecker.intrusive is False  # é passivo: entra sempre, sem gating
+
+
+def test_corpo_hostil_nao_trava_a_varredura() -> None:
+    # DoS: um `<script` de 256 KB sem fechar travava o HTMLParser (>120 s), a mesma
+    # classe do ReDoS que o F100 matou em content.py. A extração por regex limitada
+    # tem que resolver em tempo trivial. Cronometrado — a regressão volta VERMELHA.
+    hostil = "<script " + "a" * 262_144
+    inicio = time.perf_counter()
+    forms = _coletar_forms(hostil)
+    decorrido = time.perf_counter() - inicio
+    assert forms == []  # sem `<form`, nada a extrair
+    assert decorrido < 1.0, f"extração de forms degradou: {decorrido:.2f}s"
+
+
+def test_corpo_hostil_com_form_valido_ainda_e_lido_rapido() -> None:
+    # Ruído hostil ANTES de um form legítimo: o form real ainda é lido, sem travar.
+    corpo = (
+        "<script " + "a" * 200_000 + "</script>" + "<form method='post' action='/x'><input name='c'></form>"
+    )
+    inicio = time.perf_counter()
+    forms = _coletar_forms(corpo)
+    decorrido = time.perf_counter() - inicio
+    assert decorrido < 1.0, f"degradou com ruído + form: {decorrido:.2f}s"
+    assert any(f.method == "post" for f in forms)

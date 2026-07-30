@@ -18,7 +18,6 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from html import escape
-from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urlsplit
 
 from sentinela.checks.base import Checker
@@ -57,40 +56,42 @@ class _Form:
         return any(_CSRF.search(c.name or "") for c in self.campos)
 
 
-class _ColetorDeForms(HTMLParser):
-    """Extrai ``<form>`` e seus campos do HTML. Tolerante a marcação quebrada — é
-    um parser de leitura, não um validador; entrada hostil não pode derrubá-lo."""
+# Extração de formulários por regex LIMITADA — O(n) e à prova de corpo hostil. O
+# `HTMLParser` da stdlib é super-linear num `<script`/`<style` sem fechamento (a MESMA
+# classe de DoS que o F100 matou em content.py); aqui o escaneamento de cada tag tem
+# teto de bytes, então nenhum `<...>` gigante sem `>` degrada a varredura.
+_ATTR_SCAN = 2048  # teto de bytes lidos por tag (igual ao content.py)
+_FORM_RE = re.compile(rf"<form\b([^>]{{0,{_ATTR_SCAN}}})>(.*?)</form>", re.IGNORECASE | re.DOTALL)
+_CAMPO_RE = re.compile(rf"<(?:input|textarea|select)\b([^>]{{0,{_ATTR_SCAN}}})>", re.IGNORECASE)
+_A_METHOD = re.compile(r"""\bmethod\s*=\s*["']?\s*([a-zA-Z]+)""", re.IGNORECASE)
+_A_ACTION = re.compile(r"""\baction\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
+_A_NAME = re.compile(r"""\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+_A_TYPE = re.compile(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.forms: list[_Form] = []
-        self._atual: _Form | None = None
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        a = {k.lower(): (v or "") for k, v in attrs}
-        if tag == "form":
-            self._atual = _Form(
-                method=(a.get("method") or "get").strip().lower(),
-                action=a.get("action", ""),
-            )
-        elif tag in ("input", "textarea", "select") and self._atual is not None:
-            self._atual.campos.append(
-                _Campo(
-                    name=a.get("name", ""),
-                    type=(a.get("type") or "text").strip().lower(),
-                )
-            )
+def _attr(regex: re.Pattern[str], texto: str) -> str:
+    """Primeiro valor de atributo casado (aspas duplas, simples ou sem aspas), ou vazio."""
+    m = regex.search(texto)
+    if not m:
+        return ""
+    return next((g for g in m.groups() if g is not None), "")
 
-    def handle_endtag(self, tag: str) -> None:
-        if tag == "form" and self._atual is not None:
-            self.forms.append(self._atual)
-            self._atual = None
 
-    def close(self) -> None:  # noqa: D102
-        super().close()
-        if self._atual is not None:  # <form> sem </form>: não perde o que já foi lido
-            self.forms.append(self._atual)
-            self._atual = None
+def _coletar_forms(html: str) -> list[_Form]:
+    """Formulários e seus campos, com escaneamento limitado por tag (não trava em
+    entrada hostil). `<form>` sem `</form>` de fechamento é ignorado — trade-off de
+    robustez a favor de nunca degradar."""
+    forms: list[_Form] = []
+    for m in _FORM_RE.finditer(html):
+        cabecalho, interior = m.group(1), m.group(2)
+        metodo = (_attr(_A_METHOD, cabecalho) or "get").strip().lower()
+        action = _attr(_A_ACTION, cabecalho)
+        campos = [
+            _Campo(name=_attr(_A_NAME, t), type=(_attr(_A_TYPE, t) or "text").strip().lower())
+            for t in _CAMPO_RE.findall(interior)
+        ]
+        forms.append(_Form(method=metodo, action=action, campos=campos))
+    return forms
 
 
 class FormsChecker(Checker):
@@ -113,17 +114,10 @@ class FormsChecker(Checker):
 
     # --- formulários ------------------------------------------------------- #
     def _forms(self, html: str) -> Iterable[Finding]:
-        parser = _ColetorDeForms()
-        try:
-            parser.feed(html)
-            parser.close()
-        except Exception:  # noqa: BLE001 — parser de leitura nunca derruba a varredura
-            return
-
         senha_get = False
         form_http = False
         csrf_ausente = False
-        for f in parser.forms:
+        for f in _coletar_forms(html):
             if f.method == "get" and f.tem_senha:
                 senha_get = True
             # Form com credencial cujo `action` aponta para http:// (conteúdo misto). O caso
