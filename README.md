@@ -6,7 +6,7 @@
 
 ### Diagnóstico não-intrusivo de segurança para aplicações web — com relatório pronto para o cliente.
 
-*Descubra em segundos como o servidor da sua aplicação se expõe na internet: cabeçalhos de segurança, TLS/certificado, cookies, CORS, métodos HTTP, exposição de informação e segurança de DNS/e-mail — mapeado ao **OWASP Top 10:2025** e entregue como um relatório profissional.*
+*Descubra em segundos como o servidor da sua aplicação se expõe na internet: cabeçalhos de segurança, TLS/certificado, cookies, CORS, métodos HTTP, exposição de informação, superfície de formulários e injeção (passiva) e segurança de DNS/e-mail — mapeado ao **OWASP Top 10:2025** e entregue como um relatório profissional.*
 
 [![CI](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml/badge.svg)](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -41,11 +41,16 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 | **Métodos HTTP** | `TRACE` (XST), métodos de escrita expostos (`PUT`/`DELETE`) | A02 |
 | **Exposição de info** | Versão de servidor/stack vazada, listagem de diretório | A02 |
 | **Conteúdo da página** | Conteúdo misto (*mixed content*), ausência de **SRI** em recursos de terceiros, formulário com `action` insegura, campo de senha sem HTTPS | A03 / A04 |
+| **Formulários & injeção (passiva)** | Credencial trafegando em formulário `GET`, formulário com credencial postando para `http://` (conteúdo misto), formulário que muda estado sem token anti-CSRF, parâmetro refletido sem escape (superfície de XSS) e dado sensível na query string — lendo só o HTML já baixado, **sem enviar um único payload de ataque** | A01 / A04 / A05 / A07 |
 | **Arquivos públicos** | `robots.txt` (RFC 9309) revelando caminhos sensíveis por convenção | A02 |
 | **Superfície de ataque** | Descoberta de subdomínios via **Certificate Transparency** e detecção de **subdomain takeover** (CNAME órfão) — opt-in `--descobrir` | A02 |
 | **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
 
 Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**, **impacto**, **recomendação prática** e **referências** (OWASP, MDN, RFC), além da classificação **OWASP Top 10:2025 + CWE**.
+
+> **A fronteira passivo↔ativo é explícita — de propósito.** O checker `forms` é a fatia de injeção que dá para avaliar com honestidade sem enviar payload: ele lê apenas o HTML que o motor já baixou uma vez e sinaliza a *superfície* (isto é uma superfície de ataque), sem nunca afirmar que ela é explorável (isto dispararia de fato) — porque não mandou nada para provar. Em bateria de campo contra um laboratório controlado, essa camada passiva mediu **precisão/recall de 0,909**, com a classe `SENHA_EM_GET` em **1,00**. A **confirmação ativa** — provar SQLi/XSS com um marcador inerte — é da edição Pro (seção **🔓 Versão Pro**, abaixo), gated e sob autorização.
+>
+> **Robustez contra alvo hostil:** a extração de formulários e a busca por reflexão usam **regex de escaneamento limitado** (teto de 2048 bytes por tag, `O(n)`) — não o `HTMLParser` da stdlib, que degrada num `<script` de 256 KB sem fechamento (a mesma classe de DoS que já foi corrigida no checker de conteúdo). Um corpo hostil de 256 KB é varrido em tempo trivial, com **teste que cronometra a regressão** (falha se passar de 1 s).
 
 ---
 
@@ -136,10 +141,13 @@ Principais opções do `scan`:
 
 O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava a leitura profunda, e uma capacidade dessas na mão de qualquer um é risco, não recurso:
 
+- 💉 **Confirmação ativa de injeção (com payload SEGURO):** onde a vitrine sinaliza a *superfície* (parâmetro refletido, formulário sem CSRF, credencial em `GET`), a Pro **confirma** — envia um **marcador inerte**, não um exploit, e prova se SQLi/XSS/etc. dispara de fato. Contra um laboratório controlado, mediu **precisão 1,00 e recall 1,00 nas 7 classes de injeção**, com **0 falso-positivo** no lado corrigido. Não explora, não extrai dado, não persiste nada: só transforma "isto é uma superfície" em "isto confirma".
 - 🕸️ **Modo profundo (crawler):** mapeia a **aplicação inteira** — páginas servidas, rotas de SPA lidas direto do bundle e endpoints — e diagnostica **página a página**, não só a URL que você digitou. Reconhece, categoriza e mostra a superfície toda daquele mesmo jeito didático (o que é · por que importa · como corrigir).
 - 👁️ **Sondagem ativa** de dezenas de rotas e artefatos sensíveis (muito além do modo aberto);
-- 🧭 **Análise E confirmação ativa da API:** enumera as operações do contrato OpenAPI, aponta as sem autenticação e **confirma no ar** — bate no endpoint sem credencial e prova se a auth é aplicada de fato (acabou o "achismo" da análise estática). Mapeia também pontos de **reflexão de parâmetro** (superfície de XSS), tudo read-only e sem tocar em rotas de ação;
+- 🧭 **Análise E confirmação ativa da API:** enumera as operações do contrato OpenAPI, aponta as sem autenticação e **confirma no ar** — bate no endpoint sem credencial e prova se a auth é aplicada de fato (acabou o "achismo" da análise estática), tudo read-only e sem tocar em rotas de ação;
 - 🐛 **Detecção de modo debug e erro verboso**, provocando o servidor com segurança (read-only).
+
+**Sendo direto sobre o que muda:** nesta ferramenta o Pro é **código a mais**, não só serviço — o motor ativo de confirmação de injeção não existe na edição pública, que fica na leitura passiva de propósito. (No resto da suíte, a engine pública é a mesma; lá o Pro é o serviço — consultoria, PoC, reteste conduzido.) E essa camada ativa é **gated**: só roda com `--autorizado` e escopo por escrito, porque envia tráfego que o dono do sistema vai ver e registrar.
 
 É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
 
@@ -188,7 +196,8 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 **Esta ferramenta é para avaliação de sistemas que você possui ou tem autorização explícita e por escrito para testar.**
 
-- O **modo padrão é não-intrusivo**: só observa o que o servidor já expõe a um visitante comum (cabeçalhos, TLS, consultas DNS públicas).
+- O **modo padrão é não-intrusivo**: só observa o que o servidor já expõe a um visitante comum (cabeçalhos, TLS, consultas DNS públicas). A checagem de **formulários e injeção** também é passiva — lê o HTML já baixado e **não envia nenhum payload de ataque**.
+- A **confirmação ativa de injeção** (edição Pro) é a exceção que gera tráfego de sonda: por isso é **gated** — exige `--autorizado` e escopo por escrito, e envia marcador inerte, nunca um exploit.
 - Mesmo assim, **rode apenas contra domínios que você possui ou tem autorização por escrito para avaliar**. Volume de requisições e registro em log são do dono do sistema, não seus.
 - No Brasil, o acesso não autorizado a dispositivo informático é crime (**Lei 12.737/2012**, agravada pela **Lei 14.155/2021**). A **autorização por escrito, com escopo definido**, é o que descaracteriza o ilícito. Considere ainda o **Marco Civil da Internet** (Lei 12.965/2014) e a **LGPD** (Lei 13.709/2018) ao tratar qualquer dado encontrado.
 

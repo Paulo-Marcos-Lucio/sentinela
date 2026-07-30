@@ -136,7 +136,11 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   `pipx`/`pip install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"` — está no README,
   no guia de uso e na receita de CI.
 - README: `--timeout` é 8s (dizia 15s), o `sarif` aparece no diagrama de arquitetura e as opções
-  `--descobrir` e `--sem-verificacao-tls` estão documentadas.
+  `--descobrir` e `--sem-verificacao-tls` estão documentadas. Passa a documentar o checker `forms`
+  (superfície de injeção passiva, mapeada a A01/A04/A05/A07 + CWE), a fronteira explícita
+  passivo↔ativo e os números de campo medidos (superfície P/R 0,909, `SENHA_EM_GET` 1,00; confirmação
+  ativa da edição Pro com precisão/recall 1,00 nas 7 classes contra laboratório controlado), com o
+  recado de que a camada ativa é *gated* (`--autorizado` + escopo).
 - CHANGELOG: `--perfil` estava listado ao mesmo tempo em "Corrigido" e em "Planejado".
 
 ### Interno
