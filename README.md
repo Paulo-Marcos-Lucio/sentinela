@@ -52,6 +52,8 @@ Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**
 >
 > **Robustez contra alvo hostil:** a extração de formulários e a busca por reflexão usam **regex de escaneamento limitado** (teto de 2048 bytes por tag, `O(n)`) — não o `HTMLParser` da stdlib, que degrada num `<script` de 256 KB sem fechamento (a mesma classe de DoS que já foi corrigida no checker de conteúdo). Um corpo hostil de 256 KB é varrido em tempo trivial, com **teste que cronometra a regressão** (falha se passar de 1 s).
 
+> **Escopo, sem rodeio:** a varredura automatizada **não substitui** um pentest manual — falhas de lógica de negócio, injeção e autorização exigem teste humano dedicado. A Sentinela cobre com profundidade a camada de **configuração e higiene** (OWASP A02 e A04), que é onde mora a maior parte dos problemas de baixo custo e alto impacto.
+
 ---
 
 ## 🚀 Instalação
@@ -139,15 +141,18 @@ Principais opções do `scan`:
 
 ## 🔓 Versão Pro (privada) — a leitura que cruza a linha
 
-O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava a leitura profunda, e uma capacidade dessas na mão de qualquer um é risco, não recurso:
+O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e defensivo. A **versão Pro é privada** — de propósito. Ela destrava a leitura profunda, e uma capacidade dessas na mão de qualquer um é risco, não recurso. O que muda, lado a lado com a vitrine:
 
-- 💉 **Confirmação ativa de injeção (com payload SEGURO):** onde a vitrine sinaliza a *superfície* (parâmetro refletido, formulário sem CSRF, credencial em `GET`), a Pro **confirma** — envia um **marcador inerte**, não um exploit, e prova se SQLi/XSS/etc. dispara de fato. Contra um laboratório controlado, mediu **precisão 1,00 e recall 1,00 nas 7 classes de injeção**, com **0 falso-positivo** no lado corrigido. Não explora, não extrai dado, não persiste nada: só transforma "isto é uma superfície" em "isto confirma".
-- 🕸️ **Modo profundo (crawler):** mapeia a **aplicação inteira** — páginas servidas, rotas de SPA lidas direto do bundle e endpoints — e diagnostica **página a página**, não só a URL que você digitou. Reconhece, categoriza e mostra a superfície toda daquele mesmo jeito didático (o que é · por que importa · como corrigir).
-- 👁️ **Sondagem ativa** de dezenas de rotas e artefatos sensíveis (muito além do modo aberto);
-- 🧭 **Análise E confirmação ativa da API:** enumera as operações do contrato OpenAPI, aponta as sem autenticação e **confirma no ar** — bate no endpoint sem credencial e prova se a auth é aplicada de fato (acabou o "achismo" da análise estática), tudo read-only e sem tocar em rotas de ação;
-- 🐛 **Detecção de modo debug e erro verboso**, provocando o servidor com segurança (read-only).
+| Dimensão | Público — a vitrine (você roda) | Pro — privada, `--autorizado` |
+| --- | --- | --- |
+| **Postura** | Passivo · **zero payload de ataque** — lê só o que o servidor já entregou | Ativo · envia um **marcador inerte** (nunca um exploit), gated por escopo escrito |
+| **Injeção (SQLi / XSS / …)** | **Sinaliza a superfície**: parâmetro refletido, formulário sem CSRF, credencial em `GET` — camada passiva mediu **0,909** de precisão/recall em campo | **Confirma** se dispara de fato — **precisão 1,00 · recall 1,00** nas 7 classes no lab, **0 falso-positivo** no lado corrigido |
+| **Profundidade** | Diagnostica **a URL que você digitou** | **Crawler**: mapeia a aplicação (páginas, rotas de SPA lidas do bundle, endpoints) e diagnostica **página a página** |
+| **API** | Não avalia contrato de API | Enumera as operações do **OpenAPI**, aponta as sem autenticação e **confirma no ar** se a auth é aplicada — read-only, sem tocar em rotas de ação |
+| **Sondagem** | Só a superfície que o alvo já expõe (`robots.txt`, cabeçalhos, TLS…) | Dezenas de **rotas e artefatos sensíveis** + detecção de **modo debug / erro verboso**, provocando o servidor com segurança (read-only) |
+| **O que muda** | você lê a **fachada** | **código a mais**: o motor ativo de confirmação, que **não existe** na edição pública |
 
-**Sendo direto sobre o que muda:** nesta ferramenta o Pro é **código a mais**, não só serviço — o motor ativo de confirmação de injeção não existe na edição pública, que fica na leitura passiva de propósito. (No resto da suíte, a engine pública é a mesma; lá o Pro é o serviço — consultoria, PoC, reteste conduzido.) E essa camada ativa é **gated**: só roda com `--autorizado` e escopo por escrito, porque envia tráfego que o dono do sistema vai ver e registrar.
+**Sendo direto:** nesta ferramenta o Pro é **código a mais**, não só serviço — o motor ativo de confirmação de injeção não existe na edição pública, que fica na leitura passiva de propósito. (No resto da suíte AppSec a engine pública é a mesma; lá o Pro é **serviço** — consultoria, PoC autorizado, reteste conduzido.) E essa camada ativa é **gated**: só roda com `--autorizado` e escopo por escrito, porque envia tráfego que o dono do sistema vai ver e registrar. Não explora, não extrai dado, não persiste nada: só transforma "isto é uma superfície" em "isto confirma".
 
 É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
 
@@ -162,20 +167,32 @@ O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e d
 
 ---
 
-## 🗺️ Como isso vira valor numa consultoria
-
-A Sentinela foi desenhada para ser o **primeiro passo de um engajamento**, não o último:
-
-1. **Diagnóstico relâmpago** — rode a varredura não-intrusiva e entregue o relatório HTML. Baixo atrito, alto impacto: o cliente *vê* os problemas.
-2. **Priorização** — os achados já vêm ordenados por severidade e com recomendação prática, virando um plano de correção.
-3. **Correção e reteste** — aplicadas as correções, uma nova varredura comprova a redução de risco (o reteste é entregável esperado do mercado).
-4. **Recorrência** — varredura programada como evidência contínua de gestão de vulnerabilidades para a LGPD.
-
-> A varredura automatizada **não substitui** um pentest manual — falhas de lógica de negócio, injeção e autorização exigem teste humano dedicado. A Sentinela cobre com profundidade a camada de **configuração e higiene** (OWASP A02 e A04), que é onde mora a maior parte dos problemas de baixo custo e alto impacto.
-
----
-
 ## 🏗️ Arquitetura
+
+**Em 20 segundos:** você aponta uma URL; o motor faz **uma** coleta da resposta (HTTP/TLS/DNS) e a compartilha com todas as checagens, que rodam **em paralelo** — dez checagens de cabeçalho não disparam dez requisições. Cada checagem que encontra algo emite um `Finding` **imutável**; a taxonomia classifica esse achado em **OWASP Top 10:2025 + CWE** e a pontuação vira uma **nota de higiene** (0–100, A–F). No fim, o mesmo resultado é renderizado em cinco formatos — do relatório para humano (console, Markdown, HTML) ao contrato para máquina (JSON `suite-appsec/1` e SARIF 2.1.0). Ou seja: entra uma URL, sai um diagnóstico de configuração pronto para o cliente **e** para o pipeline.
+
+```mermaid
+flowchart LR
+    A["cli.py — Typer · URL do alvo"] --> ENG["core/engine.py — motor"]
+    ENG --> CTX["core/context.py — ScanContext · coleta a resposta 1x e compartilha"]
+    CTX --> CHK["checks/ — detectores paralelos · herdam de Checker"]
+    CHK --> FND["core/models.py — Finding (imutável)"]
+    FND --> MAP["knowledge/mapping.py — OWASP Top 10:2025 + CWE"]
+    MAP --> SCO["core/scoring.py — nota de higiene (0–100, A–F)"]
+    SCO --> REP["report/ — renderização"]
+    subgraph "formatos de saída"
+      CON["console · rich"]
+      MD["markdown"]
+      HT["html · jinja2"]
+      JS["json · suite-appsec/1"]
+      SA["sarif 2.1.0"]
+    end
+    REP --> CON
+    REP --> MD
+    REP --> HT
+    REP --> JS
+    REP --> SA
+```
 
 Projeto em camadas, com cada checagem isolada e testável:
 
