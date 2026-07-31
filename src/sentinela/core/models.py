@@ -189,6 +189,15 @@ class ScanResult:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     finished_at: datetime | None = None
     tool_version: str = ""
+    ambiente: dict[str, str] = field(default_factory=dict)
+    """Condições em que ESTA varredura rodou (Python, OpenSSL, resolvedor, modo).
+
+    Existe porque, diante de dois relatórios divergentes do mesmo alvo, não havia como
+    saber qual dos dois era confiável. Vários achados dependem da máquina — a versão
+    do OpenSSL decide se dá para testar TLS legado, o resolvedor decide se as checagens
+    de DNS rodam, o relógio decide a validade do certificado. Carimbar isso no
+    entregável é o que torna um laudo auditável meses depois.
+    """
 
     def add(self, finding: Finding) -> None:
         self.findings.append(finding)

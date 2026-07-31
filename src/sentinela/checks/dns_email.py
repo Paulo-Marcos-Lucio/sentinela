@@ -30,6 +30,26 @@ def _resolver() -> dns.resolver.Resolver:
     return resolver
 
 
+def _resolvedor_responde(resolver: dns.resolver.Resolver, domain: str) -> bool:
+    """O resolvedor desta máquina consegue responder o básico sobre o domínio?
+
+    Usa NS e SOA: são os dois registros que qualquer domínio delegado tem e que
+    qualquer resolvedor sabe responder. Se nenhum dos dois volta, o problema é a rede
+    ou o resolvedor — não o domínio —, e afirmar ausência de SPF/DMARC a partir daí
+    seria inventar um veredito.
+    """
+    for tipo in ("NS", "SOA"):
+        try:
+            resolver.resolve(domain, tipo)
+        except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+            return True  # respondeu: o domínio é que não tem esse registro
+        except dns.exception.DNSException:
+            continue
+        else:
+            return True
+    return False
+
+
 def _txt_records(resolver: dns.resolver.Resolver, name: str) -> list[str] | None:
     """TXT do nome. ``[]`` = consulta OK e sem registro (ausência REAL); ``None`` = a consulta
     FALHOU (timeout/SERVFAIL/NoNameservers) → inconclusivo, não se pode afirmar ausência."""
@@ -85,6 +105,41 @@ class DnsEmailChecker(Checker):
             return
 
         resolver = _resolver()
+        # Consulta-sonda ANTES de tudo: se o resolvedor desta máquina não responde nem o
+        # básico, todas as checagens abaixo devolveriam silêncio — e silêncio, no
+        # relatório, é indistinguível de "domínio em ordem".
+        #
+        # Medido: mesmo alvo, mesma versão. Resolvedor do escritório → SPF e DMARC
+        # ausentes, nota 74/B. Resolvedor de casa (roteador como primeiro nameserver,
+        # que SERVFAILa em CAA e DNSKEY) → nenhum achado de DNS, nota 90/A. Nada no
+        # entregável distinguia os dois casos.
+        if not _resolvedor_responde(resolver, domain):
+            yield Finding(
+                id="DNS_NAO_AVALIADO",
+                title="DNS não pôde ser avaliado a partir desta máquina",
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    f"O resolvedor desta máquina não respondeu a consultas básicas para "
+                    f"`{domain}`. Nenhuma checagem de DNS/e-mail foi executada."
+                ),
+                # `nameservers` pode trazer str ou objeto Nameserver conforme a versão
+                # do dnspython; str() normaliza os dois.
+                evidence="nameservers: "
+                + (", ".join(str(ns) for ns in resolver.nameservers[:4]) or "não configurados"),
+                impact=(
+                    "SPF, DMARC, CAA, DNSSEC, MTA-STS e TLS-RPT ficaram SEM VEREDITO. A "
+                    "ausência deles neste relatório não significa que o domínio está em "
+                    "ordem — significa que não foi possível perguntar."
+                ),
+                recommendation=(
+                    "Rode de uma rede sem filtro de DNS, ou aponte um resolvedor público, e "
+                    "repita a varredura antes de tratar a seção de DNS como conclusiva."
+                ),
+                references=(ref.DMARC_ORG,),
+            )
+            return
+
         yield from self._check_spf(resolver, domain)
         yield from self._check_dmarc(resolver, domain)
         yield from self._check_caa(resolver, domain)

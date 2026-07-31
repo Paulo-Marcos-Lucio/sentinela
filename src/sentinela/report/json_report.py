@@ -36,6 +36,9 @@ def render_json(result: ScanResult) -> str:
             "scheme": result.target.scheme,
         },
         "mode": "intrusive" if result.intrusive else "non-intrusive",
+        # Condições da máquina que rodou. Vários achados dependem delas, e sem este
+        # carimbo dois relatórios divergentes do mesmo alvo eram indistinguíveis.
+        "environment": result.ambiente,
         "started_at": result.started_at.isoformat(),
         "finished_at": result.finished_at.isoformat() if result.finished_at else None,
         "duration_seconds": round(result.duration_seconds, 2),

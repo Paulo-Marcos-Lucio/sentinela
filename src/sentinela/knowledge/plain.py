@@ -21,6 +21,32 @@ INTRO_LEIGO: str = (
 
 # finding.id -> explicação em termos simples, com analogia. 1–2 frases.
 _PLAIN: dict[str, str] = {
+    # --- Limites da execução: o que a varredura NÃO conseguiu verificar ---
+    "DNS_NAO_AVALIADO": (
+        "A caixa de correio da marca não pôde ser vistoriada: a lista telefônica (o DNS) "
+        "não respondeu daqui. Não é que esteja tudo certo — é que não deu para perguntar."
+    ),
+    "TRANSPORTE_NAO_AVALIADO": (
+        "Não foi possível bater na porta sem cadeado (a porta 80) a partir desta rede, "
+        "então não dá para dizer se quem chega por ela é levado para a porta segura."
+    ),
+    "CSP_NAO_AVALIADA": (
+        "A página veio pela metade, e a lista de fornecedores autorizados pode estar "
+        "justamente no pedaço que não chegou. Dizer que ela não existe seria chute."
+    ),
+    "TLS_LEGADO_NAO_AVALIADO": (
+        "Não deu para testar se o servidor ainda aceita as versões antigas do cadeado, "
+        "porque o computador que rodou a vistoria não sabe mais falar essas versões."
+    ),
+    "DESCOBERTA_NAO_AVALIADA": (
+        "A lista pública de certificados, que revela as filiais esquecidas da loja "
+        "(subdomínios), não respondeu agora. Nenhuma filial foi vistoriada."
+    ),
+    "RELOGIO_LOCAL_DIVERGENTE": (
+        "O relógio deste computador está longe do relógio do site. Como a validade do "
+        "crachá é conferida contra o relógio local, as datas deste relatório podem estar "
+        "erradas para os dois lados."
+    ),
     # --- Cabeçalhos de segurança (as regras de segurança afixadas na parede) ---
     "CSP_AUSENTE": (
         "Falta a lista de 'fornecedores autorizados' de conteúdo. Sem ela, o navegador aceita "

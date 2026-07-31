@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import platform
+import ssl
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -25,6 +27,29 @@ _MAX_WORKERS = 8
 _PRIMARY_BODY_CAP = 262_144  # 256 KB
 
 
+def condicoes_de_execucao() -> dict[str, str]:
+    """Carimbo das condições da máquina que rodou a varredura.
+
+    Cada item aqui é uma variável que JÁ MUDOU um achado em teste de campo:
+    o OpenSSL decide se dá para testar TLS 1.0/1.1, o resolvedor decide se as
+    checagens de DNS rodam, e o relógio decide a validade do certificado.
+    """
+    ambiente = {
+        "python": platform.python_version(),
+        "openssl": ssl.OPENSSL_VERSION,
+        "sistema": f"{platform.system()} {platform.release()}",
+        "relogio_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    try:
+        import dns.resolver
+
+        ns = dns.resolver.Resolver().nameservers[:3]
+        ambiente["resolvedor_dns"] = ", ".join(str(n) for n in ns) or "não configurado"
+    except Exception:  # noqa: BLE001 - o carimbo nunca derruba a varredura
+        ambiente["resolvedor_dns"] = "indisponível"
+    return ambiente
+
+
 def run_scan(
     target: Target,
     config: ScanConfig,
@@ -37,7 +62,12 @@ def run_scan(
     total fica limitado pela checagem mais lenta, não pela soma. Uma falha em uma
     checagem é capturada em ``result.errors`` — nunca interrompe as demais.
     """
-    result = ScanResult(target=target, intrusive=config.intrusive, tool_version=__version__)
+    result = ScanResult(
+        target=target,
+        intrusive=config.intrusive,
+        tool_version=__version__,
+        ambiente=condicoes_de_execucao(),
+    )
 
     with HttpClient(
         timeout=config.timeout,
@@ -120,8 +150,13 @@ def _probe_http(client: HttpClient, target: Target) -> Probe | None:
     decidido por um serviço DIFERENTE na porta 80 do mesmo host (contaminação cruzada).
     Para alvo ``https://``, a sonda continua na 80 de propósito — a pergunta é "a versão
     em texto aberto deste host faz upgrade?", e o texto aberto mora na 80.
+
+    Quando a sonda FALHA, o Probe de erro é devolvido do mesmo jeito (em vez de ``None``):
+    quem consome precisa distinguir "o servidor não redireciona" de "não consegui nem
+    chegar na porta 80". As duas coisas produziam o mesmo silêncio, e o silêncio valia 8
+    pontos a mais na nota — num firewall corporativo que bloqueia egress na 80, um site
+    que serve texto aberto passava sem apontamento.
     """
     porta = f":{target.port}" if target.scheme == "http" and target.port != 80 else ""
     url = f"http://{target.host_for_url}{porta}/"
-    probe = client.request("GET", url, follow_redirects=False)
-    return probe if probe.ok else None
+    return client.request("GET", url, follow_redirects=False)

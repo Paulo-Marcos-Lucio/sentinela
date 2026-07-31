@@ -151,7 +151,33 @@ class SubdomainTakeoverChecker(Checker):
 
         subdominios = discover_subdomains(domain)
         if subdominios is None:
-            return  # crt.sh inconclusivo — não afirmar nada
+            # As duas fontes de Certificate Transparency falharam (fora do ar, cota de
+            # requisições estourada por IP, rede sem saída). Isso costumava ser silêncio
+            # — e silêncio aqui é grave: `SUBDOMAIN_TAKEOVER` é CRÍTICO e vale 40 pontos.
+            # Numa máquina o laudo trazia o achado e a nota despencava; noutra, com a cota
+            # gasta, o mesmo alvo saía limpo. O cliente não tinha como saber a diferença.
+            yield Finding(
+                id="DESCOBERTA_NAO_AVALIADA",
+                title="Descoberta de subdomínios não pôde ser executada",
+                subject=domain,
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    "As fontes públicas de Certificate Transparency não responderam nesta "
+                    f"execução, então nenhum subdomínio de `{domain}` foi enumerado."
+                ),
+                impact=(
+                    "Sem a lista de subdomínios, a checagem de subdomain takeover não teve o "
+                    "que analisar. A ausência dela neste relatório NÃO é atestado de que não "
+                    "existe subdomínio órfão."
+                ),
+                recommendation=(
+                    "Repita a varredura mais tarde (as fontes aplicam cota por IP) ou forneça "
+                    "a lista de subdomínios a partir da zona de DNS do próprio domínio."
+                ),
+                references=(ref.CRT_SH, ref.OWASP_WSTG_SUBDOMAIN),
+            )
+            return
 
         if subdominios:
             yield self._superficie(domain, subdominios)

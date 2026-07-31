@@ -182,12 +182,12 @@ def test_tls_hardening_inconclusivo_nao_gera_achado() -> None:
 
 
 def test_protocolos_legados_aceitos() -> None:
-    ids = {f.id for f in checker._check_protocols(["TLS 1.0", "TLS 1.1"])}
+    ids = {f.id for f in checker._check_protocols(["TLS 1.0", "TLS 1.1"], [])}
     assert ids == {"TLS_PROTOCOLO_LEGADO"}
 
 
 def test_sem_protocolo_legado_nao_gera_achado() -> None:
-    assert list(checker._check_protocols([])) == []
+    assert list(checker._check_protocols([], [])) == []
 
 
 # --------------------------------------------------------------------------- #
@@ -208,7 +208,7 @@ def test_run_costura_certificado_confianca_e_protocolos(monkeypatch) -> None:  #
         lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.2", "AES128-GCM-SHA256"),
     )
     monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "self signed certificate")
-    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ["TLS 1.0"])
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: (["TLS 1.0"], []))
 
     ctx = make_context(target=make_target("https://example.com/"))
     ids = {f.id for f in mod.TlsChecker().run(ctx)}
@@ -221,7 +221,7 @@ def test_run_sem_endpoint_tls_nao_inventa_achado(monkeypatch) -> None:  # type: 
 
     monkeypatch.setattr(mod, "_fetch_certificate", lambda *a, **k: (None, None, None))
     monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "erro qualquer")
-    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ["TLS 1.0"])
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: (["TLS 1.0"], []))
     ctx = make_context(target=make_target("https://example.com/"))
     assert list(mod.TlsChecker().run(ctx)) == []
 

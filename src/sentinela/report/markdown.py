@@ -55,6 +55,14 @@ def render_markdown(result: ScanResult) -> str:
     a(f"| Modo | {'Intrusivo (autorizado)' if result.intrusive else 'Não-intrusivo'} |")
     a(f"| Checagens executadas | {len(result.checks_run)} |")
     a(f"| Nota de higiene | **{score.value}/100 · Conceito {score.grade}** |")
+    for rotulo, chave in (
+        ("Sistema", "sistema"),
+        ("Python", "python"),
+        ("OpenSSL", "openssl"),
+        ("Resolvedor DNS", "resolvedor_dns"),
+    ):
+        if valor := result.ambiente.get(chave):
+            a(f"| {rotulo} | `{valor}` |")
     a("")
 
     a("## Sumário executivo")

@@ -35,6 +35,14 @@ class Tag:
 
 # finding.id -> Tag. Achados puramente informativos/higiene podem não ter OWASP.
 _TAGS: dict[str, Tag] = {
+    # "Não avaliado": inconclusivo NÃO é ausência. Sem taxonomia OWASP de propósito —
+    # não são vulnerabilidade, são limite declarado da execução.
+    "DNS_NAO_AVALIADO": Tag(None, None, None),
+    "TRANSPORTE_NAO_AVALIADO": Tag(None, None, None),
+    "CSP_NAO_AVALIADA": Tag(None, None, None),
+    "TLS_LEGADO_NAO_AVALIADO": Tag(None, None, None),
+    "DESCOBERTA_NAO_AVALIADA": Tag(None, None, None),
+    "RELOGIO_LOCAL_DIVERGENTE": Tag(None, None, None),
     # Cabeçalhos de segurança -> A02 Security Misconfiguration
     "XCTO_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "REFERRER_POLICY_AUSENTE": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
