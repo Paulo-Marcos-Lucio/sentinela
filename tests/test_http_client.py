@@ -170,7 +170,7 @@ def test_download_e_interrompido_no_teto_nao_apenas_truncado() -> None:
                 yield b"A" * 1024
 
     with HttpClient(timeout=1.0) as client:
-        corpo = client._read_capped(_RespostaFalsa(), 4096)  # type: ignore[arg-type]
+        corpo, _trunc, _lidos = client._read_capped(_RespostaFalsa(), 4096)  # type: ignore[arg-type]
 
     assert len(corpo) == 4096
     assert puxados <= 5, f"o download continuou depois do teto: {puxados} pedaços de 1 KB puxados"

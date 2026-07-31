@@ -29,14 +29,29 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Topic :: Security",
 ]
+# Piso E TETO em tudo. Sem teto, duas instalações em dias diferentes montam
+# ferramentas diferentes — e o problema não é só "quebrar o import":
+#
+#   typer 0.12.0–0.12.3 não aceita a anotação `list[Formato] | None` do `--formato`
+#   e, dependendo da versão, ou levanta RuntimeError na inicialização ou registra o
+#   comando sem opções — a varredura sai com ZERO achado e código de saída 0. Num
+#   pipeline, isso é um portão verde para sempre. Por isso o piso subiu de 0.12
+#   para 0.15.
+#
+# O teto é sempre o próximo major (ou o próximo minor, onde o projeto ainda quebra
+# contrato em minor). Subir teto é decisão consciente, com a suíte rodando antes.
 dependencies = [
-  "typer>=0.12",
-  "httpx>=0.27",
-  "dnspython>=2.6",
-  "cryptography>=42",
-  "tldextract>=5.1",
-  "jinja2>=3.1",
-  "rich>=13.7",
+  "typer>=0.15,<0.30",
+  "httpx>=0.27,<0.30",
+  "dnspython>=2.6,<3",
+  "cryptography>=42,<50",
+  "tldextract>=5.1,<6",
+  "jinja2>=3.1,<4",
+  "rich>=13.7,<15",
+  # Âncora de confiança TLS explícita: `checks/tls.py` valida a cadeia contra o
+  # MESMO bundle que o httpx usa, para que duas máquinas com lojas de CA diferentes
+  # cheguem ao mesmo veredito sobre o mesmo certificado.
+  "certifi>=2024.2.2",
 ]
 
 [project.optional-dependencies]

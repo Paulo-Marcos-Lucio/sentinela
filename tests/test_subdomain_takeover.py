@@ -33,9 +33,17 @@ def test_sem_flag_descobrir_nao_roda(monkeypatch: pytest.MonkeyPatch) -> None:
     assert chamado["v"] is False
 
 
-def test_crt_inconclusivo_nao_gera_achado(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_crt_inconclusivo_declara_que_nao_avaliou(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fonte de CT fora do ar ou com cota estourada não pode virar silêncio.
+
+    `SUBDOMAIN_TAKEOVER` é CRÍTICO e vale 40 pontos na nota. Antes, uma máquina com a
+    cota gasta produzia um laudo limpo e outra máquina produzia o achado — e nada no
+    relatório distinguia "não achei" de "não consegui procurar".
+    """
     monkeypatch.setattr(st, "discover_subdomains", lambda _d: None)
-    assert _ids(_ctx()) == set()
+    achados = list(st.SubdomainTakeoverChecker().run(_ctx()))
+    assert [f.id for f in achados] == ["DESCOBERTA_NAO_AVALIADA"]
+    assert achados[0].severity.weight == 0  # declarar limite não pode punir o alvo
 
 
 def test_superficie_reportada(monkeypatch: pytest.MonkeyPatch) -> None:

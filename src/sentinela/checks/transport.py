@@ -48,7 +48,35 @@ class TransportChecker(Checker):
             return
 
         http_probe = ctx.http_probe
-        if http_probe is None or not http_probe.ok:
+        if http_probe is None:
+            return
+        if not http_probe.ok:
+            # A porta 80 não respondeu. Isso NÃO é o mesmo que "o servidor redireciona
+            # direitinho", e era assim que estava sendo tratado: silêncio, e 8 pontos a
+            # mais na nota. Firewall corporativo com egress na 80 fechado, portal cativo
+            # de hotel e provedor que intercepta a porta caem todos aqui — e o veredito
+            # mudava conforme a rede de onde a varredura saiu.
+            yield Finding(
+                id="TRANSPORTE_NAO_AVALIADO",
+                title="Upgrade HTTP → HTTPS não pôde ser avaliado desta rede",
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    "Não foi possível alcançar a porta 80 do alvo a partir desta máquina, "
+                    "então não dá para dizer se o site redireciona para HTTPS."
+                ),
+                evidence=str(http_probe.error or "sem resposta na porta 80"),
+                impact=(
+                    "A ausência de `SEM_REDIRECT_HTTPS` neste relatório não é aprovação: a "
+                    "checagem não rodou. De uma rede sem bloqueio de saída na porta 80 o "
+                    "resultado pode ser diferente."
+                ),
+                recommendation=(
+                    "Repita a varredura de uma rede sem filtro de egresso, ou confirme a "
+                    "regra de redirecionamento direto na configuração do servidor."
+                ),
+                references=(ref.OWASP_TLS_CHEATSHEET,),
+            )
             return
 
         status = http_probe.status_code

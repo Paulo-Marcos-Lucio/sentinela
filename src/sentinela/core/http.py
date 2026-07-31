@@ -46,11 +46,27 @@ class Probe:
     set_cookies: tuple[str, ...] = ()
     error: str | None = None
     elapsed_ms: float = 0.0
+    truncated: bool = False
+    """O corpo veio INCOMPLETO (teto de leitura, prazo estourado ou conexão cortada).
+
+    Existe para uma regra só, e ela é a diferença entre relatório confiável e
+    relatório perigoso: **nenhuma checagem pode AFIRMAR ausência a partir de um corpo
+    truncado.** Uma metatag de CSP que ficou fora dos bytes lidos não é uma CSP que
+    não existe — mas o achado dizia, com severidade média, "a resposta não define uma
+    Content-Security-Policy". Numa rede pior, o mesmo alvo mudava de achado.
+    """
+    bytes_lidos: int = 0
+    """Bytes de corpo efetivamente lidos, para o relatório poder mostrar a conta."""
 
     @property
     def ok(self) -> bool:
         """Verdadeiro se a requisição completou sem erro de transporte."""
         return self.error is None
+
+    @property
+    def corpo_confiavel(self) -> bool:
+        """Verdadeiro quando dá para afirmar ausência de algo com base no corpo."""
+        return self.ok and not self.truncated
 
     def header(self, name: str) -> str | None:
         """Busca um cabeçalho de forma case-insensitive."""
@@ -83,6 +99,13 @@ class HttpClient:
             headers={"User-Agent": self.user_agent, "Accept": "*/*"},
             # Pool de conexões (não limita o tamanho do corpo — isso é feito por streaming).
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            # O default do httpx é trust_env=True, e isso fazia a varredura herdar
+            # HTTP_PROXY/HTTPS_PROXY/NO_PROXY e SSL_CERT_FILE do ambiente SEM registrar
+            # nada no relatório. Efeito medido: com um proxy quebrado exportado, um site
+            # no ar virava ALVO_INACESSIVEL (alta) e a nota era tetada em F; com um proxy
+            # de inspeção corporativo, o relatório saía inteiro e ERRADO, em silêncio.
+            # Um diagnóstico tem que medir o alvo, não a estação de trabalho.
+            trust_env=False,
         )
 
     def request(
@@ -111,6 +134,8 @@ class HttpClient:
         body_snippet = ""
         final_url = url
         elapsed_ms = 0.0
+        truncado = False
+        lidos = 0
 
         try:
             for hop in range(_MAX_REDIRECTS + 1):
@@ -129,11 +154,32 @@ class HttpClient:
                         next_url = str(response.url.join(location))
                         if _host_is_blocked(httpx.URL(next_url).host):
                             # Guarda anti-SSRF: não seguimos para host interno/privado.
-                            break
+                            #
+                            # E falhamos ALTO. Antes disto o laço só dava `break` e o
+                            # Probe voltava como um 3xx de corpo vazio — que as checagens
+                            # liam como "resposta boa, sem nada dentro" e transformavam
+                            # numa enxurrada de achados de ausência falsos. Basta um
+                            # Pi-hole devolvendo 0.0.0.0, um DNS split-horizon ou uma VPN
+                            # para o resolvedor da máquina disparar isso, e aí o mesmo
+                            # alvo rende relatórios diferentes em máquinas diferentes.
+                            return Probe(
+                                url=url,
+                                status_code=status,
+                                headers=resp_headers,
+                                final_url=final_url,
+                                redirect_chain=tuple(chain),
+                                error=(
+                                    "RedirecionamentoBloqueado: o alvo redirecionou para "
+                                    f"{next_url}, que o resolvedor desta máquina aponta para "
+                                    "endereço interno/não roteável. A varredura parou aqui em "
+                                    "vez de seguir (guarda anti-SSRF) — confira o DNS desta "
+                                    "máquina antes de ler o resultado."
+                                ),
+                            )
                         current = next_url
                         continue
 
-                    body_snippet = self._read_capped(response, cap)
+                    body_snippet, truncado, lidos = self._read_capped(response, cap)
                     elapsed_ms = _safe_elapsed(response)
                     break
         except (httpx.HTTPError, httpx.InvalidURL, OSError) as exc:
@@ -148,22 +194,37 @@ class HttpClient:
             redirect_chain=tuple(chain),
             set_cookies=tuple(set_cookies),
             elapsed_ms=elapsed_ms,
+            truncated=truncado,
+            bytes_lidos=lidos,
         )
 
-    def _read_capped(self, response: httpx.Response, cap: int) -> str:
-        """Lê no máximo ``cap`` bytes do corpo, interrompendo o download."""
+    def _read_capped(
+        self, response: httpx.Response, cap: int
+    ) -> tuple[str, bool, int]:
+        """Lê no máximo ``cap`` bytes do corpo. Devolve ``(texto, truncado, bytes)``.
+
+        O ``truncado`` é o que impede a leitura parcial de virar afirmação de ausência.
+        São duas formas de vir incompleto, e as duas contam: bater no teto ou a conexão
+        cair no meio. Além delas, comparamos com ``Content-Length``:
+        um servidor que anuncia 80 KB e entrega 30 KB entregou um corpo parcial mesmo
+        sem nenhuma dessas condições ter disparado aqui.
+        """
         chunks: list[bytes] = []
         total = 0
+        truncado = False
         try:
             for chunk in response.iter_bytes():
                 chunks.append(chunk)
                 total += len(chunk)
                 if total >= cap:
+                    truncado = True
                     break
         except (httpx.HTTPError, OSError):
-            return ""
-        raw = b"".join(chunks)[:cap]
-        return raw.decode(response.encoding or "utf-8", "replace")
+            truncado = True  # conexão cortada no meio: o que temos é parcial
+        anunciado = _content_length(response)
+        if anunciado is not None and total < anunciado:
+            truncado = True
+        return _decode_body(chunks, cap, response), truncado, total
 
     def get(self, url: str, **kwargs: object) -> Probe:
         return self.request("GET", url, **kwargs)  # type: ignore[arg-type]
@@ -219,6 +280,25 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_multicast
         or ip.is_unspecified
     )
+
+
+def _content_length(response: httpx.Response) -> int | None:
+    """``Content-Length`` como inteiro, ou ``None`` se ausente/inválido."""
+    headers = getattr(response, "headers", None)
+    bruto = headers.get("content-length") if headers is not None else None
+    if bruto is None:
+        return None
+    try:
+        return int(bruto.strip())
+    except ValueError:
+        return None
+
+
+def _decode_body(chunks: list[bytes], cap: int, response: httpx.Response) -> str:
+    """Decodifica os bytes já lidos (mesmo que parciais por reset/prazo), tolerando
+    corpos binários/encoding inválido (``errors="replace"`` nunca levanta exceção)."""
+    raw = b"".join(chunks)[:cap]
+    return raw.decode(response.encoding or "utf-8", "replace")
 
 
 def _safe_elapsed(response: httpx.Response) -> float:

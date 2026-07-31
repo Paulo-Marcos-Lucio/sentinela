@@ -115,9 +115,15 @@ class SecurityHeadersChecker(Checker):
         # vai em `<meta>` no HTML e o navegador a aplica. Ignorar isso rendia CSP_AUSENTE e
         # REFERRER_POLICY_AUSENTE falsos em todo site desse tipo.
         meta = _politicas_via_meta(probe.body_snippet)
+        # Corpo truncado (teto de leitura, prazo estourado, conexão cortada) não autoriza
+        # afirmar que uma política NÃO existe: a metatag pode estar nos bytes que não
+        # chegaram. Medido: mesmo alvo, link rápido → CSP_VIA_META (informativo); link
+        # lento com o corpo cortado → CSP_AUSENTE (média), afirmando ao cliente que não
+        # há CSP num site que tem CSP, e recomendando implantar o que já está lá.
+        corpo_parcial = probe.truncated and not meta
 
         yield from self._check_hsts(probe, serves_https)
-        yield from self._check_csp(probe, meta.get("content-security-policy"))
+        yield from self._check_csp(probe, meta.get("content-security-policy"), corpo_parcial)
         yield from self._check_frame_options(probe)
         for spec in _SIMPLE:
             if probe.has_header(spec.header):
@@ -244,9 +250,35 @@ class SecurityHeadersChecker(Checker):
                 references=(ref.MDN_HSTS,),
             )
 
-    def _check_csp(self, probe: Probe, csp_meta: str | None) -> Iterable[Finding]:
+    def _check_csp(
+        self, probe: Probe, csp_meta: str | None, corpo_parcial: bool = False
+    ) -> Iterable[Finding]:
         value = probe.header("Content-Security-Policy") or csp_meta
         if value is None:
+            if corpo_parcial:
+                yield Finding(
+                    id="CSP_NAO_AVALIADA",
+                    title="Presença de CSP não pôde ser confirmada (corpo incompleto)",
+                    category=self.category,
+                    severity=Severity.INFO,
+                    description=(
+                        "Não há cabeçalho `Content-Security-Policy`, e o HTML foi lido apenas "
+                        f"parcialmente ({probe.bytes_lidos} bytes) — uma política declarada em "
+                        "`<meta>` mais adiante no documento não teria sido vista."
+                    ),
+                    evidence=f"bytes lidos: {probe.bytes_lidos}",
+                    impact=(
+                        "Este achado NÃO afirma que falta CSP: afirma que não deu para "
+                        "verificar. Afirmar ausência a partir de leitura parcial faz o mesmo "
+                        "alvo mudar de veredito conforme a qualidade da rede."
+                    ),
+                    recommendation=(
+                        "Repita a varredura numa conexão melhor ou com `--timeout` maior para "
+                        "obter um veredito conclusivo sobre a CSP."
+                    ),
+                    references=(ref.MDN_CSP,),
+                )
+                return
             if probe.has_header("Content-Security-Policy-Report-Only"):
                 yield Finding(
                     id="CSP_APENAS_REPORT_ONLY",
