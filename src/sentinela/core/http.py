@@ -198,9 +198,7 @@ class HttpClient:
             bytes_lidos=lidos,
         )
 
-    def _read_capped(
-        self, response: httpx.Response, cap: int
-    ) -> tuple[str, bool, int]:
+    def _read_capped(self, response: httpx.Response, cap: int) -> tuple[str, bool, int]:
         """Lê no máximo ``cap`` bytes do corpo. Devolve ``(texto, truncado, bytes)``.
 
         O ``truncado`` é o que impede a leitura parcial de virar afirmação de ausência.

@@ -123,7 +123,10 @@ class DnsEmailChecker(Checker):
                     f"O resolvedor desta máquina não respondeu a consultas básicas para "
                     f"`{domain}`. Nenhuma checagem de DNS/e-mail foi executada."
                 ),
-                evidence=f"nameservers: {', '.join(resolver.nameservers[:4]) or 'não configurados'}",
+                # `nameservers` pode trazer str ou objeto Nameserver conforme a versão
+                # do dnspython; str() normaliza os dois.
+                evidence="nameservers: "
+                + (", ".join(str(ns) for ns in resolver.nameservers[:4]) or "não configurados"),
                 impact=(
                     "SPF, DMARC, CAA, DNSSEC, MTA-STS e TLS-RPT ficaram SEM VEREDITO. A "
                     "ausência deles neste relatório não significa que o domínio está em "
