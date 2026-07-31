@@ -54,8 +54,13 @@ _PLAIN: dict[str, str] = {
         "A CSP diz quem pode entregar mercadoria na sua loja."
     ),
     "CSP_DIRETIVA_INSEGURA": (
-        "A lista de fornecedores existe, mas tem uma brecha que na prática deixa entrar 'qualquer "
+        "A lista de fornecedores de SCRIPT tem uma brecha que na prática deixa entrar 'qualquer "
         "um' — o que anula boa parte da proteção contra scripts maliciosos."
+    ),
+    "CSP_ESTILO_INLINE": (
+        "A brecha está na lista de fornecedores de ESTILO (a aparência da página), não na de "
+        "script. É como liberar quem pode trocar a vitrine, mantendo trancado quem pode mexer "
+        "no caixa: vale apertar, mas a proteção principal continua de pé."
     ),
     "CSP_APENAS_REPORT_ONLY": (
         "A lista de fornecedores existe, mas está em modo 'só anota quem furou a regra', sem barrar "

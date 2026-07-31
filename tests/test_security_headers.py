@@ -207,8 +207,11 @@ def test_csp_strict_dynamic_nao_esconde_unsafe_inline_em_style_src() -> None:
         },
     )
     achados = {f.id: f for f in _run(headers)}
-    assert "CSP_DIRETIVA_INSEGURA" in achados
-    assert "'unsafe-inline'" in achados["CSP_DIRETIVA_INSEGURA"].description
+    # A intenção do teste é que o inline de ESTILO não seja engolido pelo `strict-dynamic`
+    # do script. O achado continua existindo — agora com o ID e o texto certos, apontando
+    # para style-src em vez de acusar um script-src que está impecável.
+    assert "CSP_ESTILO_INLINE" in achados
+    assert "'unsafe-inline'" in achados["CSP_ESTILO_INLINE"].description
 
 
 def test_csp_script_src_sobrepoe_default_src_com_strict_dynamic() -> None:
@@ -305,3 +308,58 @@ def test_cabecalho_tem_precedencia_sobre_a_meta() -> None:
     headers = dict(BONS_HEADERS, **{"Content-Security-Policy": "default-src 'none'; base-uri 'none'"})
     ids = {f.id for f in _run_com_corpo(headers, _HTML_META)}
     assert "POLITICA_VIA_META" not in ids  # a CSP veio de cabeçalho; nada a ressalvar
+
+
+# --------------------------------------------------------------------------- #
+# O achado tem que dizer em QUAL diretiva está o problema.
+#
+# Falso positivo de campo (31/07/2026, bussoladosdados.com.br): política com
+# `script-src 'self' https://static.cloudflareinsights.com` — limpo — e
+# `unsafe-inline` só em `style-src` recebia um achado cujo título, impacto e
+# recomendação falavam de `script-src`. O cliente abre a CSP, procura no
+# script-src, não acha nada, e perde a confiança no laudo inteiro.
+# --------------------------------------------------------------------------- #
+CSP_DE_CAMPO = (
+    "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "img-src 'self' data: https:; font-src 'self' https://fonts.gstatic.com; "
+    "object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+)
+
+
+def test_unsafe_inline_so_em_style_nao_acusa_script() -> None:
+    headers = dict(BONS_HEADERS, **{"Content-Security-Policy": CSP_DE_CAMPO})
+    achados = {f.id: f for f in _run(headers)}
+
+    assert "CSP_DIRETIVA_INSEGURA" not in achados, "acusou script-src com script-src limpo"
+    estilo = achados["CSP_ESTILO_INLINE"]
+    # A regra que este teste protege: nenhum texto do achado pode apontar para script-src.
+    texto = " ".join([estilo.title, estilo.description, estilo.impact, estilo.recommendation])
+    assert "script-src" in estilo.description or "scripts" in estilo.description
+    assert "Remova `unsafe-inline`/`unsafe-eval` da fonte de scripts" not in texto
+    assert "ESTILOS" in estilo.description
+
+
+def test_unsafe_inline_em_script_e_style_reporta_o_script_uma_vez_so() -> None:
+    """Quando os dois estão sujos, o achado de script cobre; não duplicar o aviso."""
+    headers = dict(
+        BONS_HEADERS,
+        **{"Content-Security-Policy": "script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'"},
+    )
+    ids = [f.id for f in _run(headers)]
+    assert "CSP_DIRETIVA_INSEGURA" in ids
+    assert "CSP_ESTILO_INLINE" not in ids
+
+
+def test_unsafe_eval_em_style_src_e_inerte_e_nao_vira_achado_de_script() -> None:
+    """`unsafe-eval` fora da fonte de script não faz nada — acusá-lo é ruído."""
+    headers = dict(
+        BONS_HEADERS,
+        **{"Content-Security-Policy": "script-src 'self'; style-src 'self' 'unsafe-eval'"},
+    )
+    assert "CSP_DIRETIVA_INSEGURA" not in {f.id for f in _run(headers)}
+
+
+def test_default_src_sem_script_src_ainda_e_tratado_como_script() -> None:
+    headers = dict(BONS_HEADERS, **{"Content-Security-Policy": "default-src 'self' 'unsafe-inline'"})
+    assert "CSP_DIRETIVA_INSEGURA" in {f.id for f in _run(headers)}
