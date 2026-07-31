@@ -22,6 +22,12 @@ from sentinela.knowledge import references as ref
 HSTS_ALVO = 63_072_000  # 2 anos (recomendação OWASP)
 HSTS_PISO = 31_536_000  # 1 ano (mínimo para preload / boa prática)
 
+# Famílias de diretiva da CSP. Separá-las é o que permite o achado dizer ONDE está o
+# problema: `unsafe-inline` em `script-src` permite executar script; em `style-src`
+# permite injeção de CSS, que é outra coisa e tem outro tamanho.
+_DIRETIVAS_DE_SCRIPT = frozenset({"script-src", "script-src-elem", "script-src-attr"})
+_DIRETIVAS_DE_ESTILO = frozenset({"style-src", "style-src-elem", "style-src-attr"})
+
 
 @dataclass(frozen=True, slots=True)
 class _SimpleHeader:
@@ -322,6 +328,8 @@ class SecurityHeadersChecker(Checker):
 
         directives = _parse_csp(value)
         script = directives.get("script-src", directives.get("default-src", []))
+        # `script-src-elem`/`script-src-attr` (CSP3) sobrepõem `script-src` para tags e
+        # handlers inline. `unsafe-inline` em qualquer um deles é problema de SCRIPT.
         # CSP3: na presença de 'strict-dynamic' o navegador IGNORA allowlists de host,
         # esquemas e 'unsafe-inline' ao carregar script; na presença de nonce/hash (CSP2+)
         # ele já ignora 'unsafe-inline'. Nas duas formas esses tokens são FALLBACK de
@@ -341,27 +349,68 @@ class SecurityHeadersChecker(Checker):
                 return nonce_ou_hash
             return False
 
-        fracos: list[str] = []
-        if "'unsafe-eval'" in value.lower():
-            fracos.append("'unsafe-eval'")  # 'strict-dynamic' NÃO neutraliza eval
-        if any(not _inline_ignorado(d) for d, fontes in directives.items() if "'unsafe-inline'" in fontes):
-            fracos.append("'unsafe-inline'")  # preserva o achado em style-src
-        fracos.sort()
-        if fracos:
+        # O achado tem que dizer em QUAL diretiva está o problema. Uma política com
+        # `script-src 'self'` limpo e `unsafe-inline` só em `style-src` recebia um achado
+        # cujo título, impacto e recomendação falavam de `script-src` — o cliente abria a
+        # CSP, procurava no script-src, não achava nada, e perdia a confiança no laudo.
+        # Detecção conservadora está certa; redação errada é falso positivo do mesmo jeito.
+        script_afetado: list[str] = []
+        # `unsafe-eval` só faz sentido para script: em `style-src` o token é inerte.
+        if "'unsafe-eval'" in script:
+            script_afetado.append("'unsafe-eval'")  # 'strict-dynamic' NÃO neutraliza eval
+        if any(
+            "'unsafe-inline'" in fontes and not _inline_ignorado(d)
+            for d, fontes in directives.items()
+            if d in _DIRETIVAS_DE_SCRIPT or (d == "default-src" and "script-src" not in directives)
+        ):
+            script_afetado.append("'unsafe-inline'")
+        script_afetado.sort()
+
+        estilo_afetado = any(
+            "'unsafe-inline'" in fontes for d, fontes in directives.items() if d in _DIRETIVAS_DE_ESTILO
+        ) or ("'unsafe-inline'" in directives.get("default-src", []) and "style-src" not in directives)
+
+        if script_afetado:
             yield Finding(
                 id="CSP_DIRETIVA_INSEGURA",
-                title="CSP contém diretivas inseguras",
+                title="CSP permite script inline ou avaliação dinâmica",
                 category=self.category,
                 severity=Severity.LOW,
-                description=f"A CSP presente usa {', '.join(fracos)}.",
+                description="A fonte de scripts da CSP usa " + ", ".join(script_afetado) + ".",
                 evidence=truncate(value),
                 impact=(
-                    "`unsafe-inline` e `unsafe-eval` anulam boa parte da proteção da "
-                    "CSP contra XSS, permitindo scripts inline e avaliação dinâmica."
+                    "Em `script-src`, `unsafe-inline` e `unsafe-eval` anulam boa parte da "
+                    "proteção da CSP contra XSS, permitindo scripts inline e avaliação dinâmica."
                 ),
                 recommendation=(
-                    "Remova `unsafe-inline`/`unsafe-eval` e adote nonces ou hashes "
-                    "para os scripts legítimos."
+                    "Remova `unsafe-inline`/`unsafe-eval` da fonte de scripts e adote nonces "
+                    "ou hashes para os scripts legítimos."
+                ),
+                references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
+            )
+        elif estilo_afetado:
+            # Só entra quando o script está limpo: senão seria o mesmo aviso duas vezes.
+            yield Finding(
+                id="CSP_ESTILO_INLINE",
+                title="CSP permite estilo inline (style-src 'unsafe-inline')",
+                category=self.category,
+                severity=Severity.LOW,
+                description=(
+                    "A CSP usa `'unsafe-inline'` na fonte de ESTILOS. A fonte de scripts "
+                    "está limpa — a proteção contra XSS de script continua de pé."
+                ),
+                evidence=truncate(value),
+                impact=(
+                    "Estilo inline liberado permite injeção de CSS: dado sensível já presente "
+                    "na página (um token num atributo, por exemplo) pode ser exfiltrado por "
+                    "seletor de atributo combinado com `background-image`. Depende de existir "
+                    "um ponto de injeção — é bem menor que execução de script, e por isso "
+                    "aparece como oportunidade de endurecimento, não como falha de proteção."
+                ),
+                recommendation=(
+                    "Se o site não depende de `style=` inline, troque `'unsafe-inline'` por "
+                    "nonce/hash em `style-src`. Se depender (é comum com CSS-in-JS), documente "
+                    "como risco aceito — não mexa no `script-src`, que já está correto."
                 ),
                 references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
             )

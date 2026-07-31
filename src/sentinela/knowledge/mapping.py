@@ -50,6 +50,7 @@ _TAGS: dict[str, Tag] = {
     "COOP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_DIRETIVA_INSEGURA": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_ESTILO_INLINE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_APENAS_REPORT_ONLY": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_WILDCARD_PERMISSIVO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_SEM_OBJECT_SRC": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
