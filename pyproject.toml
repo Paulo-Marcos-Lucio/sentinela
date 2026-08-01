@@ -47,7 +47,7 @@ dependencies = [
   "cryptography>=42,<50",
   "tldextract>=5.1,<6",
   "jinja2>=3.1,<4",
-  "rich>=13.7,<15",
+  "rich>=13.7,<16",
   # Âncora de confiança TLS explícita: `checks/tls.py` valida a cadeia contra o
   # MESMO bundle que o httpx usa, para que duas máquinas com lojas de CA diferentes
   # cheguem ao mesmo veredito sobre o mesmo certificado.
