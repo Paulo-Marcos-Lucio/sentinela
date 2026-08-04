@@ -269,7 +269,29 @@ def _host_is_blocked(host: str | None) -> bool:
     return False
 
 
+# Faixas não-roteáveis que o `is_private` do stdlib não cobre — ou não cobre em TODA versão
+# suportada. `100.64.0.0/10` (CGNAT, RFC 6598) simplesmente não está na lista dele, e não é
+# faixa acadêmica: dentro dela mora `100.100.100.100`, o endpoint de metadados da Alibaba
+# Cloud. As outras duas entraram no stdlib só nas versões corrigidas pelo CVE-2024-4032;
+# como o projeto suporta 3.10+, ficam explícitas para o veredito não depender do
+# micro-release do Python instalado na máquina que roda a varredura.
+_FAIXAS_EXTRAS = (
+    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT (RFC 6598)
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF Protocol Assignments (RFC 6890)
+    ipaddress.ip_network("198.18.0.0/15"),  # benchmarking (RFC 2544)
+)
+
+
 def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Verdadeiro se o endereço cai em faixa interna/não-roteável.
+
+    A NORMALIZAÇÃO vem antes da política, e é o que faltava: `::ffff:100.64.0.1` é o mesmo
+    host que `100.64.0.1`, escrito de outro jeito, e passava batido porque a checagem
+    consultava as propriedades da forma IPv6 sem desembrulhar o IPv4 embutido.
+    """
+    mapeado = getattr(ip, "ipv4_mapped", None)
+    if mapeado is not None:
+        ip = mapeado
     return (
         ip.is_private
         or ip.is_loopback
@@ -277,6 +299,9 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        # `in` entre famílias diferentes é sempre falso (contrato do `ipaddress`), então
+        # um endereço IPv6 genuíno atravessa esta linha sem custo nem erro.
+        or any(ip in faixa for faixa in _FAIXAS_EXTRAS)
     )
 
 

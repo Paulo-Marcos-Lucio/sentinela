@@ -191,6 +191,45 @@ def test_erro_de_transporte_vira_probe_e_nao_excecao() -> None:
     assert probe.error
 
 
+def test_cgnat_e_bloqueado() -> None:
+    """`100.64.0.0/10` (RFC 6598) não é "privado" para o módulo `ipaddress` — e passava.
+
+    Não é faixa acadêmica: é o espaço de CGNAT das operadoras, e dentro dele mora
+    `100.100.100.100`, o endpoint de metadados da Alibaba Cloud. Um alvo hostil que
+    redirecionasse para lá fazia a varredura buscar credenciais de instância.
+    """
+    assert _host_is_blocked("100.64.0.1") is True
+    assert _host_is_blocked("100.100.100.100") is True
+    assert _host_is_blocked("100.127.255.255") is True
+    # Contraprova de borda: os vizinhos IMEDIATOS da faixa continuam liberados — uma
+    # denylist larga demais transforma alvo legítimo em "bloqueado" sem ninguém notar.
+    assert _host_is_blocked("100.63.255.255") is False
+    assert _host_is_blocked("100.128.0.0") is False
+
+
+def test_ipv4_mapeado_em_ipv6_e_bloqueado() -> None:
+    """`::ffff:100.64.0.1` é o MESMO host que `100.64.0.1`, escrito de outro jeito.
+
+    Depender do `is_private` do stdlib aqui é frágil: a resposta dele para IPv4 mapeado
+    mudou entre patch releases do próprio Python (CVE-2024-4032), e o projeto suporta
+    3.10+. A normalização passa a ser nossa, e o veredito deixa de variar com o intérprete.
+    """
+    assert _host_is_blocked("::ffff:100.64.0.1") is True
+    assert _host_is_blocked("::ffff:127.0.0.1") is True
+    assert _host_is_blocked("::ffff:169.254.169.254") is True  # metadados AWS/GCP/Azure
+    assert _host_is_blocked("::ffff:10.0.0.1") is True
+    assert _host_is_blocked("::ffff:8.8.8.8") is False  # mapeado de IP público segue público
+
+
+def test_faixas_especiais_de_teste_e_ietf_sao_bloqueadas() -> None:
+    # `192.0.0.0/24` (IETF Protocol Assignments) e `198.18.0.0/15` (benchmarking) só entram
+    # em `is_private` do stdlib a partir das versões corrigidas pelo CVE-2024-4032. Ficam
+    # explícitas para que o bloqueio não dependa do micro-release do Python da máquina.
+    assert _host_is_blocked("192.0.0.100") is True
+    assert _host_is_blocked("198.18.0.1") is True
+    assert _host_is_blocked("198.19.255.255") is True
+
+
 def test_host_que_nao_resolve_falha_fechado(monkeypatch: pytest.MonkeyPatch) -> None:
     # Política DELIBERADA: se o DNS do destino de um redirecionamento não resolve, não há
     # como afirmar que ele é externo — e a ferramenta não segue. Falhar ABERTO aqui abria
