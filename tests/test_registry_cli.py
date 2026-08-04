@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -71,11 +73,16 @@ def test_a_trava_etica_aparece_no_help() -> None:
     aprendido de boca. E quem lê a ajuda tem de sair sabendo as duas coisas: o que a
     opção habilita e de que responsabilidade ela é a declaração.
     """
-    resultado = runner.invoke(cli.app, ["scan", "--help"])
+    # Largura fixa e cor desligada: sem isto o teste passa na estação (terminal largo) e
+    # falha no CI (80 colunas), porque o rich quebra a frase — e às vezes o próprio nome
+    # da opção — no ponto onde a linha acabou. Um teste de invariante não pode depender
+    # de quantas colunas o runner tinha.
+    resultado = runner.invoke(cli.app, ["scan", "--help"], env={"COLUMNS": "200", "NO_COLOR": "1"})
     assert resultado.exit_code == 0
-    # O rich quebra as linhas da ajuda DENTRO de uma moldura — as bordas caem no meio das
-    # frases quebradas. A asserção não deve depender de onde ele quebrou nem da moldura.
-    ajuda = " ".join(resultado.stdout.replace("│", " ").split()).lower()
+    # Três normalizações, cada uma para um ruído diferente: os códigos ANSI (que o CI
+    # emite e a estação não), as bordas da moldura, e o ponto de quebra da linha.
+    sem_ansi = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", resultado.stdout)
+    ajuda = " ".join(sem_ansi.replace("│", " ").split()).lower()
     assert "--autorizado" in ajuda
     assert "por escrito" in ajuda
     assert "intrusiva" in ajuda
