@@ -12,9 +12,8 @@ obrigava um consumidor a manter uma tabela de-para só para a Sentinela.
 
 from __future__ import annotations
 
-import json
-
 from sentinela.core.models import Finding, ScanResult
+from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo, serializar_com_selo
 from sentinela.knowledge.mapping import OWASP_EDICAO, tag_for
 from sentinela.report._shared import SEVERITY_ORDER, score_of
 
@@ -24,10 +23,16 @@ SCHEMA = "suite-appsec/1"
 def render_json(result: ScanResult) -> str:
     score = score_of(result)
     counts = result.counts_by_severity()
-    payload = {
+    payload: dict[str, object] = {
         "schema": SCHEMA,
         "tool": "sentinela",
         "version": result.tool_version,
+        # Proveniência (ver `core.proveniencia`): `version` sozinho não vincula o laudo a
+        # nada — "0.1.0" já nomeou dezenas de árvores. `commit` diz QUAL código rodou e
+        # `ruleset_hash` diz QUAL catálogo; sem os dois, um reteste não distingue alvo
+        # corrigido de regra alterada.
+        "commit": descobrir_commit(),
+        "ruleset_hash": hash_do_catalogo(),
         "owasp_edition": OWASP_EDICAO,
         "target": {
             "url": result.target.url,
@@ -51,7 +56,9 @@ def render_json(result: ScanResult) -> str:
         "findings": [_finding_dict(f) for f in result.sorted_findings()],
         "errors": [{"check": e.check_id, "message": e.message} for e in result.errors],
     }
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    # `artifact_sha256` entra por último e é calculado sobre o documento SEM ele — a
+    # receita de verificação está no docstring de `serializar_com_selo`.
+    return serializar_com_selo(payload)
 
 
 def _finding_dict(finding: Finding) -> dict[str, object]:
