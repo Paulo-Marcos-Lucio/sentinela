@@ -63,6 +63,34 @@ def test_cli_checagens() -> None:
     assert "security-headers" in result.stdout
 
 
+def test_a_trava_etica_aparece_no_help() -> None:
+    """`--autorizado` estava com `hidden=True` — trava ética escondida é obscuridade.
+
+    Um controle que decide se a ferramenta envia tráfego que o dono do sistema vai ver e
+    registrar precisa ser DESCOBERTO na ajuda e AUDITÁVEL num histórico de comandos, não
+    aprendido de boca. E quem lê a ajuda tem de sair sabendo as duas coisas: o que a
+    opção habilita e de que responsabilidade ela é a declaração.
+    """
+    resultado = runner.invoke(cli.app, ["scan", "--help"])
+    assert resultado.exit_code == 0
+    # O rich quebra as linhas da ajuda DENTRO de uma moldura — as bordas caem no meio das
+    # frases quebradas. A asserção não deve depender de onde ele quebrou nem da moldura.
+    ajuda = " ".join(resultado.stdout.replace("│", " ").split()).lower()
+    assert "--autorizado" in ajuda
+    assert "por escrito" in ajuda
+    assert "intrusiva" in ajuda
+
+
+def test_modo_intrusivo_avisa_na_execucao(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A visibilidade na ajuda NÃO substitui o aviso em tempo de execução: quem digita a
+    # opção precisa ler, na hora, o que acabou de declarar. Os dois convivem.
+    monkeypatch.setattr(cli, "run_scan", lambda target, config: _fake_result(Severity.LOW))
+    resultado = runner.invoke(cli.app, ["scan", "alvo.com", "--autorizado"])
+    saida = " ".join(resultado.stdout.split())
+    assert "Modo intrusivo ativado" in saida
+    assert "Lei 12.737/2012" in saida
+
+
 def test_cli_scan_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "run_scan", lambda target, config: _fake_result(Severity.LOW))
     result = runner.invoke(cli.app, ["scan", "alvo.com"])

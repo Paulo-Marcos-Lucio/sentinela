@@ -140,10 +140,20 @@ def scan(
         typer.Option(
             "--autorizado",
             "--authorized",
-            # Não divulgado na ajuda: uso restrito a quem tem autorização por escrito
-            # e conhece a trava. Manter o aviso em tempo de execução (mais abaixo).
-            hidden=True,
-            help="ATIVA checagens intrusivas. Declare somente com autorização por escrito do alvo.",
+            # Já esteve com `hidden=True`, com a justificativa de "uso restrito a quem
+            # conhece a trava". Isso é segurança por obscuridade aplicada justamente ao
+            # controle que decide se a ferramenta envia tráfego que o dono do sistema vai
+            # ver e registrar — e o efeito prático é o inverso do pretendido: quem usa
+            # sem autorização descobre a opção no código do mesmo jeito, enquanto o
+            # operador legítimo não encontra o que precisa declarar e a auditoria perde
+            # a documentação do controle. Trava ética se lê na ajuda e se prova no
+            # histórico de comandos. O aviso em tempo de execução continua (mais abaixo).
+            help=(
+                "ATIVA as checagens intrusivas — a ferramenta passa a sondar rotas e "
+                "arquivos sensíveis, gerando tráfego que o alvo registra. Usar esta opção "
+                "É a sua declaração de que possui autorização POR ESCRITO, com escopo "
+                "definido, do responsável pelo alvo. Sem ela, a varredura é apenas passiva."
+            ),
         ),
     ] = False,
     descobrir: Annotated[
