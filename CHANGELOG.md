@@ -7,7 +7,43 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Segurança
+- **Bomba de descompressão contida.** O teto `max_body_bytes` era aplicado *depois* da
+  descompressão feita pelo `httpx`: uma bomba de 64 MiB de zeros (~64 KB na rede) levava o
+  pico de alocação a **141,6 MiB** com o teto configurado em 4 KB. O relatório saía do
+  tamanho certo — o teto protegia o texto, nunca a memória, que é o recurso que a bomba
+  quer consumir. A descompressão passou a ser da própria ferramenta (`iter_raw()` + `zlib`
+  incremental com `max_length`), o que limita a expansão na origem: pico medido depois,
+  **2,7 MiB**. Junto vieram um teto de bytes *na rede* (um fluxo de blocos vazios
+  descomprime para zero byte e nunca cruzaria o teto de saída) e `Accept-Encoding:
+  gzip, deflate` declarado explicitamente — pedir `br`/`zstd` devolveria a descompressão a
+  um codec sem teto. Corpo em codec desconhecido sai **vazio e marcado como incompleto**,
+  nunca como texto inventado.
+- **Guarda anti-SSRF fecha CGNAT e IPv4 mapeado em IPv6.** `100.64.0.0/10` (RFC 6598) não é
+  "privado" para o módulo `ipaddress` e passava — e dentro dessa faixa está
+  `100.100.100.100`, endpoint de metadados da Alibaba Cloud. `::ffff:100.64.0.1` também
+  passava, porque a checagem lia a forma IPv6 sem desembrulhar o IPv4 embutido. A
+  normalização passou a ser nossa: a resposta do stdlib para IPv4 mapeado mudou entre patch
+  releases do Python (CVE-2024-4032) e o projeto suporta 3.10+. `192.0.0.0/24` e
+  `198.18.0.0/15` ficaram explícitas pelo mesmo motivo.
+- **`--autorizado` deixa de ser oculto.** A trava ética estava com `hidden=True`: segurança
+  por obscuridade justamente no controle que decide se a ferramenta envia tráfego que o
+  alvo registra. O texto de ajuda agora diz o que a opção habilita e o que ela declara
+  (autorização por escrito, com escopo). O aviso em tempo de execução continua.
+
 ### Adicionado
+- **Proveniência no envelope do relatório JSON**: `commit` (SHA de 40 hex do código que
+  rodou), `ruleset_hash` (sha256 do catálogo — ids, escala de severidade e taxonomia) e
+  `artifact_sha256` (sha256 do próprio documento, calculado sobre ele *sem* esse campo,
+  com a receita de verificação publicada no código). Sem eles, comparar dois laudos do
+  mesmo alvo era ambíguo: "quatro achados sumiram" tanto podia ser correção quanto mudança
+  de regra. Fora de um repositório git — instalação por wheel, por exemplo — `commit` sai
+  `null`: a varredura nunca falha por causa do carimbo, e "não sei" é resposta honesta.
+  A descoberta segue a ordem `SENTINELA_COMMIT` → `git rev-parse HEAD` → `null`.
+- **Imagem base do Dockerfile fixada por digest** (índice multi-arquitetura), no lugar da
+  tag móvel `python:3.12-slim`. O repositório prega SHA-pinning e a Esteira o cobra de
+  quem audita; a própria imagem flutuava, e dois `docker build` do mesmo commit montavam
+  ambientes diferentes. Os dois estágios usam o mesmo digest, com teste guardando isso.
 - **Checagem de superfície de formulários e injeção** (`forms`, não-intrusiva): análise passiva
   do HTML já baixado, sem enviar payload. Detecta credencial trafegando em GET (`SENHA_EM_GET`,
   A07/CWE-598), formulário com campo sensível postando para destino `http://` — conteúdo misto —

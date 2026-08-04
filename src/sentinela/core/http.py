@@ -12,14 +12,18 @@ Duas decisões de segurança da própria ferramenta ficam aqui:
   infraestrutura interna (loopback, redes privadas, link-local). O alvo inicial,
   escolhido pelo operador, nunca é bloqueado (varredura interna legítima).
 * **Corpo limitado de fato**: o download é feito por streaming e interrompido em
-  ``max_body_bytes`` — um alvo não consegue nos fazer baixar gigabytes.
+  ``max_body_bytes`` — um alvo não consegue nos fazer baixar gigabytes. E o teto vale
+  sobre os bytes DESCOMPRIMIDOS, durante a leitura (ver :class:`_Descompressor`): a
+  descompressão é nossa justamente para poder ser limitada.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
+import zlib
 from dataclasses import dataclass, field
+from typing import Any
 
 import httpx
 
@@ -28,6 +32,20 @@ from sentinela.version import __version__
 USER_AGENT = f"Sentinela/{__version__} (+https://github.com/Paulo-Marcos-Lucio/sentinela)"
 
 _MAX_REDIRECTS = 10
+
+# Teto de bytes COMPRIMIDOS puxados da rede. O teto de corpo sozinho não fecha a porta:
+# um fluxo que expande pouco (ou nada) mantém a leitura andando indefinidamente sem
+# nunca cruzar o limite de saída. 2 MiB é folga larga para qualquer página real — na
+# pior razão de compressão útil, rende muito mais do que qualquer `max_body_bytes`.
+_TETO_BYTES_NA_REDE = 2 * 1024 * 1024
+
+# Codecs que sabemos desembrulhar de forma LIMITADA. Anunciamos exatamente estes no
+# Accept-Encoding: pedir `br`/`zstd` devolveria a descompressão a um codec que não
+# conseguimos limitar, e faria o comportamento da ferramenta depender de qual pacote
+# opcional está instalado na máquina.
+_ACCEPT_ENCODING = "gzip, deflate"
+_SEM_TRANSFORMACAO = frozenset({"", "identity"})
+_GZIP = frozenset({"gzip", "x-gzip"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +114,15 @@ class HttpClient:
             verify=self.verify_tls,
             # Redirecionamentos são seguidos manualmente em request(), com guarda anti-SSRF.
             follow_redirects=False,
-            headers={"User-Agent": self.user_agent, "Accept": "*/*"},
+            # `Accept-Encoding` é declarado por nós, e não pelo httpx: só pedimos os
+            # codecs que sabemos descomprimir com teto (ver _Descompressor). Deixar o
+            # default incluir `br`/`zstd` faria a proteção de memória depender de quais
+            # pacotes opcionais estão instalados na máquina que roda a varredura.
+            headers={
+                "User-Agent": self.user_agent,
+                "Accept": "*/*",
+                "Accept-Encoding": _ACCEPT_ENCODING,
+            },
             # Pool de conexões (não limita o tamanho do corpo — isso é feito por streaming).
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             # O default do httpx é trust_env=True, e isso fazia a varredura herdar
@@ -199,28 +225,47 @@ class HttpClient:
         )
 
     def _read_capped(self, response: httpx.Response, cap: int) -> tuple[str, bool, int]:
-        """Lê no máximo ``cap`` bytes do corpo. Devolve ``(texto, truncado, bytes)``.
+        """Lê no máximo ``cap`` bytes DESCOMPRIMIDOS do corpo. ``(texto, truncado, bytes)``.
 
         O ``truncado`` é o que impede a leitura parcial de virar afirmação de ausência.
-        São duas formas de vir incompleto, e as duas contam: bater no teto ou a conexão
-        cair no meio. Além delas, comparamos com ``Content-Length``:
-        um servidor que anuncia 80 KB e entrega 30 KB entregou um corpo parcial mesmo
-        sem nenhuma dessas condições ter disparado aqui.
+        São três formas de vir incompleto, e as três contam: bater no teto (de saída ou de
+        rede), a conexão cair no meio, ou o corpo vir num codec que não sabemos limitar.
+        Além delas, comparamos com ``Content-Length`` — um servidor que anuncia 80 KB e
+        entrega 30 KB entregou um corpo parcial mesmo sem nenhuma dessas ter disparado.
         """
+        descompressor = _Descompressor(_cabecalho(response, "content-encoding"))
+        if not descompressor.suportado:
+            # Corpo VAZIO e declarado incompleto é honesto; bytes comprimidos decodificados
+            # como texto seriam ruído que as checagens de conteúdo leriam como ausência.
+            return "", True, 0
+
+        # O teto de rede nunca aperta o teto pedido pelo operador: quem pede um corpo de
+        # 4 MB tem de poder baixá-lo. Ele só existe para o caso em que o de saída NÃO
+        # aperta — um fluxo que expande pouco ou nada e manteria a leitura andando.
+        teto_na_rede = max(_TETO_BYTES_NA_REDE, cap)
         chunks: list[bytes] = []
         total = 0
+        na_rede = 0
         truncado = False
         try:
-            for chunk in response.iter_bytes():
-                chunks.append(chunk)
-                total += len(chunk)
-                if total >= cap:
+            for bruto in response.iter_raw():
+                na_rede += len(bruto)
+                # O teto entra AQUI, como limite de expansão de cada pedaço: nunca se
+                # materializa mais do que ainda cabe. Ver o docstring de _Descompressor.
+                pedaco = descompressor.expande(bruto, cap - total)
+                if pedaco:
+                    chunks.append(pedaco)
+                    total += len(pedaco)
+                if total >= cap or na_rede >= teto_na_rede:
                     truncado = True
                     break
-        except (httpx.HTTPError, OSError):
-            truncado = True  # conexão cortada no meio: o que temos é parcial
+        except (httpx.HTTPError, OSError, zlib.error):
+            truncado = True  # conexão cortada ou fluxo corrompido: o que temos é parcial
+        # A comparação é com os bytes DA REDE porque é isso que o `Content-Length` mede
+        # (o tamanho já codificado) — comparar com o corpo expandido marcaria como parcial
+        # toda resposta comprimida cuja expansão coubesse abaixo do valor anunciado.
         anunciado = _content_length(response)
-        if anunciado is not None and total < anunciado:
+        if anunciado is not None and na_rede < anunciado:
             truncado = True
         return _decode_body(chunks, cap, response), truncado, total
 
@@ -235,6 +280,50 @@ class HttpClient:
 
     def __exit__(self, *exc: object) -> None:
         self.close()
+
+
+class _Descompressor:
+    """Descompressão incremental e LIMITADA — a razão de não usarmos a do ``httpx``.
+
+    O ``iter_bytes()`` do httpx expande cada pedaço que chega da rede ANTES de devolvê-lo,
+    então o teto de corpo era aplicado depois, sobre um objeto já materializado. Medido com
+    uma bomba de 64 MiB de zeros (~64 KB na rede) e ``max_body_bytes=4096``: pico de
+    **141,6 MiB** de RAM — o teto protegia o texto do relatório, nunca a memória, que é
+    justamente o recurso que a bomba quer consumir.
+
+    O ``max_length`` do ``zlib`` resolve na origem: cada chamada devolve no máximo o que
+    ainda cabe no teto, e o resto do pedaço nem chega a ser expandido.
+    """
+
+    __slots__ = ("_obj", "_primeiro", "_raw_deflate", "suportado")
+
+    def __init__(self, content_encoding: str | None) -> None:
+        nome = (content_encoding or "").strip().lower()
+        self._raw_deflate = nome == "deflate"
+        self.suportado = nome in _SEM_TRANSFORMACAO or nome in _GZIP or self._raw_deflate
+        self._primeiro = True
+        # `zlib._Decompress` não tem nome público; o tipo real é irrelevante aqui.
+        self._obj: Any = None
+        if nome in _GZIP:
+            self._obj = zlib.decompressobj(zlib.MAX_WBITS | 16)
+        elif self._raw_deflate:
+            self._obj = zlib.decompressobj(zlib.MAX_WBITS)
+
+    def expande(self, bruto: bytes, teto: int) -> bytes:
+        """No máximo ``teto`` bytes de saída a partir de ``bruto``. Nunca mais que isso."""
+        if self._obj is None:  # identity: os bytes da rede já são o corpo
+            return bruto[:teto]
+        try:
+            saida: bytes = self._obj.decompress(bruto, teto)
+        except zlib.error:
+            # Deflate "cru", sem cabeçalho zlib, ainda sai de servidores antigos (o próprio
+            # httpx faz esta segunda tentativa). Só cabe no primeiro pedaço do fluxo.
+            if not (self._raw_deflate and self._primeiro):
+                raise
+            self._obj = zlib.decompressobj(-zlib.MAX_WBITS)
+            saida = self._obj.decompress(bruto, teto)
+        self._primeiro = False
+        return saida
 
 
 def _host_is_blocked(host: str | None) -> bool:
@@ -269,7 +358,29 @@ def _host_is_blocked(host: str | None) -> bool:
     return False
 
 
+# Faixas não-roteáveis que o `is_private` do stdlib não cobre — ou não cobre em TODA versão
+# suportada. `100.64.0.0/10` (CGNAT, RFC 6598) simplesmente não está na lista dele, e não é
+# faixa acadêmica: dentro dela mora `100.100.100.100`, o endpoint de metadados da Alibaba
+# Cloud. As outras duas entraram no stdlib só nas versões corrigidas pelo CVE-2024-4032;
+# como o projeto suporta 3.10+, ficam explícitas para o veredito não depender do
+# micro-release do Python instalado na máquina que roda a varredura.
+_FAIXAS_EXTRAS = (
+    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT (RFC 6598)
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF Protocol Assignments (RFC 6890)
+    ipaddress.ip_network("198.18.0.0/15"),  # benchmarking (RFC 2544)
+)
+
+
 def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Verdadeiro se o endereço cai em faixa interna/não-roteável.
+
+    A NORMALIZAÇÃO vem antes da política, e é o que faltava: `::ffff:100.64.0.1` é o mesmo
+    host que `100.64.0.1`, escrito de outro jeito, e passava batido porque a checagem
+    consultava as propriedades da forma IPv6 sem desembrulhar o IPv4 embutido.
+    """
+    mapeado = getattr(ip, "ipv4_mapped", None)
+    if mapeado is not None:
+        ip = mapeado
     return (
         ip.is_private
         or ip.is_loopback
@@ -277,13 +388,24 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
         or ip.is_reserved
         or ip.is_multicast
         or ip.is_unspecified
+        # `in` entre famílias diferentes é sempre falso (contrato do `ipaddress`), então
+        # um endereço IPv6 genuíno atravessa esta linha sem custo nem erro.
+        or any(ip in faixa for faixa in _FAIXAS_EXTRAS)
     )
+
+
+def _cabecalho(response: httpx.Response, nome: str) -> str | None:
+    """Cabeçalho da resposta, tolerando objetos-resposta mínimos (testes, sondas falsas)."""
+    headers = getattr(response, "headers", None)
+    if headers is None:
+        return None
+    valor: str | None = headers.get(nome)
+    return valor
 
 
 def _content_length(response: httpx.Response) -> int | None:
     """``Content-Length`` como inteiro, ou ``None`` se ausente/inválido."""
-    headers = getattr(response, "headers", None)
-    bruto = headers.get("content-length") if headers is not None else None
+    bruto = _cabecalho(response, "content-length")
     if bruto is None:
         return None
     try:
