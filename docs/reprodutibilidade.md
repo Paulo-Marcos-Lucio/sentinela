@@ -65,6 +65,41 @@ Todo relatório carrega agora as condições de execução (sistema, Python, Ope
 resolvedor, relógio) no cabeçalho, em Markdown, HTML e JSON. Diante de dois relatórios
 divergentes do mesmo alvo, é por aí que se descobre qual dos dois vale.
 
+## A que código e a que regras o laudo se prende
+
+Saber que a máquina era a mesma não basta: é preciso saber que a **ferramenta** era a
+mesma. `version: "0.1.0"` não serve para isso — esse nome já designou dezenas de árvores
+diferentes. O envelope do JSON carrega três selos:
+
+| Campo | Responde | Como é obtido |
+| --- | --- | --- |
+| `commit` | qual **código** rodou | `SENTINELA_COMMIT` → `git rev-parse HEAD` no diretório do pacote → `null` |
+| `ruleset_hash` | qual **catálogo** rodou (ids, escala de severidade, taxonomia) | sha256 do catálogo montado em ordem canônica |
+| `artifact_sha256` | qual **documento** foi entregue | sha256 do próprio laudo, calculado sobre ele *sem* esse campo |
+
+Sem os dois primeiros, "no reteste quatro achados sumiram" é ambíguo: sumiram porque o
+alvo foi corrigido, ou porque a regra mudou entre as execuções? `ruleset_hash` **não**
+cobre a lógica de detecção, de propósito — refinar um detector não muda o catálogo. Para
+isso existe o `commit`; os dois juntos respondem à pergunta, e nenhum dos dois sozinho.
+
+Fora de um repositório git (instalação por wheel, por exemplo), `commit` sai `null`. A
+varredura nunca falha por causa do carimbo: "não sei" é resposta honesta, laudo que não
+sai não é.
+
+Conferindo o selo do documento, sem a ferramenta:
+
+```python
+import hashlib, json
+
+doc = json.load(open("laudo.json", encoding="utf-8"))
+selo = doc.pop("artifact_sha256")
+calc = hashlib.sha256(json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")).hexdigest()
+assert calc == selo
+```
+
+O selo prova **não-adulteração do arquivo**, não autenticidade da origem: quem reescrever
+o laudo inteiro recalcula o hash junto. Autenticidade é assinatura, e é outro trabalho.
+
 ## Edições: não existe build que ligue varredura ativa sozinha
 
 Não há mais `edition.py`. A varredura ativa depende **sempre** de declaração explícita:
@@ -98,5 +133,12 @@ requisitada custa o estado do ambiente de um cliente.
 ```bash
 sentinela scan SEU-ALVO -f json -o a.json
 sentinela scan SEU-ALVO -f json -o b.json
-diff a.json b.json     # só started_at, finished_at e duration_seconds devem diferir
+diff a.json b.json     # devem diferir APENAS os carimbos de tempo e o artifact_sha256
 ```
+
+Medido em duas execuções seguidas contra o mesmo alvo: diferem `started_at`,
+`finished_at`, `environment.relogio_utc`, `duration_seconds` (quando a rede varia) e o
+`artifact_sha256`. Este último entra na lista porque é o hash do documento inteiro,
+carimbos de tempo incluídos: dois laudos que só diferem no relógio têm, corretamente,
+selos diferentes. Já `commit` e `ruleset_hash` **têm** de bater — se não batem, as duas
+execuções não foram da mesma ferramenta, e a comparação não vale.
