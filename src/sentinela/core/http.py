@@ -270,6 +270,8 @@ class HttpClient:
         return _decode_body(chunks, cap, response), truncado, total
 
     def get(self, url: str, **kwargs: object) -> Probe:
+        """Atalho para ``request("GET", url, ...)``. Aceita os mesmos ``kwargs``
+        de :meth:`request` (``headers``, ``follow_redirects``, ``max_body_bytes``)."""
         return self.request("GET", url, **kwargs)  # type: ignore[arg-type]
 
     def close(self) -> None:
