@@ -9,11 +9,14 @@
 *Descubra em segundos como o servidor da sua aplicação se expõe na internet: cabeçalhos de segurança, TLS/certificado, cookies, CORS, métodos HTTP, exposição de informação, superfície de formulários e injeção (passiva) e segurança de DNS/e-mail — mapeado ao **OWASP Top 10:2025** e entregue como um relatório profissional.*
 
 [![CI](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml/badge.svg)](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/codeql.yml/badge.svg)](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/codeql.yml)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://img.shields.io/badge/mypy-strict-2A6DB2.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://img.shields.io/badge/OWASP-Top%2010%3A2025-000000.svg)](https://owasp.org/Top10/2025/)
+[![Testes](https://img.shields.io/badge/tests-348%20passing-brightgreen.svg)](#-qualidade-de-engenharia--método)
+[![Cobertura](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](#-qualidade-de-engenharia--método)
 
 </div>
 
@@ -222,26 +225,24 @@ O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e d
 **Em 20 segundos:** você aponta uma URL; o motor faz **uma** coleta da resposta (HTTP/TLS/DNS) e a compartilha com todas as checagens, que rodam **em paralelo** — dez checagens de cabeçalho não disparam dez requisições. Cada checagem que encontra algo emite um `Finding` **imutável**; a taxonomia classifica esse achado em **OWASP Top 10:2025 + CWE** e a pontuação vira uma **nota de higiene** (0–100, A–F). No fim, o mesmo resultado é renderizado em cinco formatos — do relatório para humano (console, Markdown, HTML) ao contrato para máquina (JSON `suite-appsec/1` e SARIF 2.1.0). Ou seja: entra uma URL, sai um diagnóstico de configuração pronto para o cliente **e** para o pipeline.
 
 ```mermaid
-flowchart LR
-    A["cli.py — Typer · URL do alvo"] --> ENG["core/engine.py — motor"]
-    ENG --> CTX["core/context.py — ScanContext · coleta a resposta 1x e compartilha"]
-    CTX --> CHK["checks/ — detectores paralelos · herdam de Checker"]
-    CHK --> FND["core/models.py — Finding (imutável)"]
-    FND --> MAP["knowledge/mapping.py — OWASP Top 10:2025 + CWE"]
-    MAP --> SCO["core/scoring.py — nota de higiene (0–100, A–F)"]
-    SCO --> REP["report/ — renderização"]
-    subgraph "formatos de saída"
-      CON["console · rich"]
-      MD["markdown"]
-      HT["html · jinja2"]
-      JS["json · suite-appsec/1"]
-      SA["sarif 2.1.0"]
+flowchart TD
+    A["<b>cli.py</b><br/>Typer · URL do alvo"] --> ENG["<b>core/engine.py</b><br/>orquestra em paralelo"]
+    ENG --> CTX["<b>core/context.py</b><br/>coleta a resposta 1×<br/>e compartilha"]
+    CTX --> REG["<b>core/registry.py</b><br/>seleciona as checagens<br/>· gating intrusivo"]
+    REG --> CHK["<b>checks/</b><br/>13 detectores paralelos"]
+    CHK --> FND["<b>core/models.py</b><br/>Finding imutável"]
+    FND --> MAP["<b>knowledge/mapping.py</b><br/>OWASP 2025 + CWE"]
+    MAP --> SCO["<b>core/scoring.py</b><br/>nota 0–100 · A–F"]
+    SCO --> REP["<b>report/</b><br/>renderização"]
+    REP --> OUT
+    subgraph OUT [" Formatos de saída "]
+        direction LR
+        CON["console"] ~~~ MD["markdown"] ~~~ HT["html"] ~~~ JS["json"] ~~~ SA["SARIF 2.1"]
     end
-    REP --> CON
-    REP --> MD
-    REP --> HT
-    REP --> JS
-    REP --> SA
+    classDef nucleo fill:#0e2a24,stroke:#3fb79e,stroke-width:2px,color:#e7ede9;
+    classDef saida fill:#241d0f,stroke:#d6a94e,color:#f5ecd9;
+    class A,ENG,CTX,REG,CHK,FND,MAP,SCO,REP nucleo;
+    class CON,MD,HT,JS,SA saida;
 ```
 
 Projeto em camadas, com cada checagem isolada e testável:
@@ -261,7 +262,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ## 🔬 Qualidade de engenharia & método
 
-**Portões, medidos agora (não aspiração):** 348 testes · cobertura 92% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+**Portões, medidos agora (não aspiração):** 348 testes · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
 
 **Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
 
@@ -272,7 +273,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 - **Laudo vinculável:** o envelope do JSON carrega `commit` (o código que rodou), `ruleset_hash` (o catálogo que rodou) e `artifact_sha256` (o documento entregue, verificável sem a ferramenta — [receita aqui](docs/reprodutibilidade.md#a-que-código-e-a-que-regras-o-laudo-se-prende)). É o que faz um reteste distinguir "o alvo foi corrigido" de "a regra mudou".
 - **Tipos estritos + imutabilidade:** `Finding`, `Target`, `Probe` e `Tag` são `@dataclass(frozen=True, slots=True)`; severidade é `IntEnum` (ordena do mais grave ao menos grave sem lógica extra).
 
-**Cadeia de suprimentos do próprio repo:** as actions do CI são fixadas por **SHA** (uma tag `@v4` é ponteiro móvel), com `persist-credentials: false`, e o **Dependabot** faz a outra metade — 1 PR agrupado por mês para `github-actions` e `pip`. É a mesma régua que a Esteira, a ferramenta de CI desta suíte, cobra de qualquer cliente.
+**Cadeia de suprimentos do próprio repo:** as actions do CI são fixadas por **SHA** (uma tag `@v4` é ponteiro móvel), com `persist-credentials: false`, e o **Dependabot** faz a outra metade — PRs agrupados por semana para `github-actions` e `pip`. É a mesma régua que a Esteira, a ferramenta de CI desta suíte, cobra de qualquer cliente.
 
 **PT-BR é decisão consciente, não descuido:** identificador de código em inglês (padrão de mercado); todo texto destinado a humano — teste, achado, doc — em PT-BR, porque quem lê o relatório final é o cliente. A consistência do contrato é testada.
 
