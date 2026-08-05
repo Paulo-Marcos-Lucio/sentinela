@@ -56,33 +56,63 @@ Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**
 
 ---
 
+## 🚀 Quickstart — do zero ao primeiro relatório
+
+**Pré-requisito:** Python **3.10+** (testado em 3.10 → 3.13; funciona também em 3.14). Verifique com `python --version`.
+
+```bash
+# 1. instale a partir do repositório (a Sentinela não está no PyPI — ver nota abaixo)
+pip install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
+
+# 2. rode o diagnóstico não-intrusivo contra o SEU alvo (domínio ou URL)
+sentinela scan seu-dominio.com.br
+
+# 3. gere o relatório HTML pronto para entregar
+sentinela scan seu-dominio.com.br -f html -o relatorio.html
+```
+
+Isso é tudo para o primeiro resultado: o passo 2 imprime, no terminal, a **nota de higiene
+(0–100, A–F)**, um **plano de ação priorizado** e cada achado com severidade, evidência,
+impacto, recomendação e a classificação **OWASP Top 10:2025 + CWE**. O passo 3 grava o mesmo
+diagnóstico como um HTML autocontido para o cliente. Nenhuma configuração é obrigatória.
+
+> A varredura padrão é **não-intrusiva**: só lê o que o servidor já expõe a um visitante
+> comum. Ainda assim, **rode apenas contra alvos que você possui ou tem autorização por
+> escrito para avaliar** (ver a seção **⚖️ Uso ético e autorização**).
+
+---
+
 ## 🚀 Instalação
 
 Requer **Python 3.10+**.
 
 A Sentinela **não está publicada no PyPI**, então `pip install sentinela` NÃO instala esta
 ferramenta — esse nome pertence a outro projeto (um watchdog de sistema operacional). A
-instalação é direto do repositório:
+instalação é direto do repositório. Escolha **uma** das formas:
 
 ```bash
-# via pipx (recomendado: ambiente isolado, comando global)
-pipx install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
-
-# ou via pip
+# A) pip — instala no ambiente/venv atual (forma testada acima)
 pip install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
 
-# a partir do código-fonte, para desenvolvimento (com ruff, mypy, pytest)
+# B) pipx — ambiente isolado + comando global `sentinela` (recomendado para uso diário)
+pipx install "git+https://github.com/Paulo-Marcos-Lucio/sentinela.git"
+
+# C) a partir do código-fonte, para desenvolvimento (traz ruff, mypy, pytest)
 git clone https://github.com/Paulo-Marcos-Lucio/sentinela.git
 cd sentinela
 pip install -e ".[dev]"
 ```
 
-Ou rode isolado, sem instalar, via Docker:
+Ou rode isolado, sem instalar nada no host, via Docker:
 
 ```bash
 docker build -t sentinela .
 docker run --rm sentinela scan exemplo.com.br
 ```
+
+> **Dica de isolamento (pip):** para não misturar com outros pacotes, crie um venv antes —
+> `python -m venv .venv && . .venv/Scripts/activate` (Windows) ou
+> `python -m venv .venv && source .venv/bin/activate` (Linux/macOS) — e então rode a forma **A**.
 
 ---
 
@@ -135,6 +165,26 @@ Principais opções do `scan`:
 | Chaveiro | `alta` | Análise de um token individual. |
 | Esteira | `alta` | Configuração de CI. |
 
+**Exemplo reproduzível (contra um alvo local).** Sirva qualquer pasta por HTTP e aponte a Sentinela para ela:
+
+```bash
+# num terminal: sobe um servidor local sem cabeçalhos de segurança
+python -m http.server 8899
+
+# noutro terminal: diagnostica esse alvo
+sentinela scan http://127.0.0.1:8899 --perfil rapido
+```
+
+Saída resumida esperada (o `http.server` não tem HTTPS nem cabeçalhos de segurança):
+
+```
+ D   55/100          Alta 1 · Média 2 · Baixa 3 · Informativa 2
+ ALTA   SEM_HTTPS                 — Alvo servido sem HTTPS (texto aberto)   · A04:2025 · CWE-319
+ MÉDIA  CSP_AUSENTE               — Content-Security-Policy ausente         · A02:2025
+ MÉDIA  CLICKJACKING_SEM_PROTECAO — sem X-Frame-Options/CSP frame-ancestors · A02:2025
+ …
+```
+
 📄 **Veja um relatório real de exemplo:** [`docs/exemplo-relatorio.md`](docs/exemplo-relatorio.md)
 
 ---
@@ -156,7 +206,7 @@ O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e d
 
 É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
 
-> **É a sua aplicação que precisa desse nível?** Faço o diagnóstico completo, a correção e o reteste — com a régua de quem veio do **backend financeiro regulado** (Pix, Open Finance, FAPI).
+> **É a sua aplicação que precisa desse nível?** Faço o diagnóstico completo, a correção e o reteste — com a régua de quem aprendeu os sistemas financeiros regulados brasileiros **escrevendo implementações de referência deles** (Pix, Open Finance, FAPI/mTLS — repositórios públicos).
 
 <div align="center">
 
@@ -211,7 +261,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ## 🔬 Qualidade de engenharia & método
 
-**Portões, medidos agora (não aspiração):** 313 testes · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 41 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+**Portões, medidos agora (não aspiração):** 348 testes · cobertura 92% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
 
 **Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
 
@@ -269,7 +319,7 @@ ruff check . && ruff format --check . && mypy src && pytest
 
 ### 👋 Sobre o autor
 
-**Paulo Marcos Lucio** — desenvolvedor com background em **sistemas financeiros regulados** (Pix, Open Finance, autenticação FAPI/mTLS) que hoje atua em **segurança de aplicações web**: diagnóstico e correção de vulnerabilidades, hardening e prevenção de falhas.
+**Paulo Marcos Lucio** — desenvolvedor Java/Spring que aprendeu os **sistemas financeiros regulados** brasileiros do jeito mais difícil: escrevendo **implementações de referência** deles (Pix, Open Finance, autenticação FAPI/mTLS — repositórios públicos). Hoje atua em **segurança de aplicações web**: diagnóstico e correção de vulnerabilidades, hardening e prevenção de falhas.
 
 **Precisa de um diagnóstico de segurança na sua aplicação web?**
 
