@@ -19,7 +19,7 @@ import pytest
 
 from sentinela.core.models import Category, Finding, ScanResult, Severity, Target
 from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo
-from sentinela.report import render_json
+from sentinela.report import render_html, render_json, render_markdown, render_sarif
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -58,6 +58,29 @@ def test_envelope_carrega_commit_ruleset_hash_e_artifact_sha256(monkeypatch: pyt
         json.dumps(sem_selo, ensure_ascii=False, indent=2).encode("utf-8")
     ).hexdigest()
     assert recalculado == data["artifact_sha256"]
+
+
+def test_selo_de_proveniencia_aparece_em_todos_os_formatos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regressão do P2 (auditoria 2026-08-05): a proveniência não pode existir só no JSON.
+
+    O HTML/Markdown é o entregável que mais circula fora da equipe, e o SARIF é o que sobe
+    pro Code Scanning — se o selo some deles, o cliente não vincula o laudo ao código/regras.
+    Este teste falha se um refactor futuro dropar o selo de qualquer formato humano/máquina.
+    """
+    monkeypatch.setenv("SENTINELA_COMMIT", "c" * 40)
+    amostra = _amostra()
+    ruleset = hash_do_catalogo()
+
+    md = render_markdown(amostra)
+    assert ruleset in md and "c" * 40 in md, "Markdown sem selo de proveniência"
+
+    html = render_html(amostra)
+    assert ruleset in html and "c" * 40 in html, "HTML sem selo de proveniência"
+
+    sarif = json.loads(render_sarif(amostra))
+    run = sarif["runs"][0]
+    assert run["properties"]["ruleset_hash"] == ruleset, "SARIF sem ruleset_hash"
+    assert run["versionControlProvenance"][0]["revisionId"] == "c" * 40, "SARIF sem commit"
 
 
 def test_artifact_sha256_denuncia_adulteracao(monkeypatch: pytest.MonkeyPatch) -> None:

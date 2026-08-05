@@ -15,7 +15,7 @@
 [![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://img.shields.io/badge/mypy-strict-2A6DB2.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://img.shields.io/badge/OWASP-Top%2010%3A2025-000000.svg)](https://owasp.org/Top10/2025/)
-[![Testes](https://img.shields.io/badge/tests-348%20passing-brightgreen.svg)](#-qualidade-de-engenharia--método)
+[![Testes](https://img.shields.io/badge/tests-351%20passing-brightgreen.svg)](#-qualidade-de-engenharia--método)
 [![Cobertura](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](#-qualidade-de-engenharia--método)
 
 </div>
@@ -262,7 +262,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ## 🔬 Qualidade de engenharia & método
 
-**Portões, medidos agora (não aspiração):** 348 testes · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+**Portões, medidos agora (não aspiração):** 351 testes (incluindo property-based com Hypothesis) · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
 
 **Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
 
@@ -270,7 +270,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 - **Separação de responsabilidades:** detecção (`checks/`, uma checagem por arquivo) × taxonomia (`knowledge/`) × renderização (`report/`); a checagem recebe um `Probe` **imutável** e nunca fala com a rede direto — testável sem tocar a internet.
 - **Fonte única de verdade:** o mapa `finding.id → OWASP Top 10:2025 + CWE` vive num só módulo (`knowledge/mapping.py`), com a edição (`2025`) como campo próprio no JSON/SARIF — o consumidor não precisa fazer parsing de rótulo para saber que `A03:2025` ≠ `A03:2021`.
 - **Contrato de saída estável:** JSON no schema `suite-appsec/1` (chaves em EN, texto humano em PT-BR) e **SARIF 2.1.0** ingestável pela aba *Security* do GitHub, com `partialFingerprints` por instância (dois subdomain takeovers distintos não se fundem num alerta só).
-- **Laudo vinculável:** o envelope do JSON carrega `commit` (o código que rodou), `ruleset_hash` (o catálogo que rodou) e `artifact_sha256` (o documento entregue, verificável sem a ferramenta — [receita aqui](docs/reprodutibilidade.md#a-que-código-e-a-que-regras-o-laudo-se-prende)). É o que faz um reteste distinguir "o alvo foi corrigido" de "a regra mudou".
+- **Laudo vinculável:** todo relatório carrega a proveniência — `commit` (o código que rodou), `ruleset_hash` (o catálogo que rodou) e `artifact_sha256` (o documento entregue, verificável sem a ferramenta — [receita aqui](docs/reprodutibilidade.md#a-que-código-e-a-que-regras-o-laudo-se-prende)). O selo aparece no **JSON, no SARIF e no rodapé do HTML/Markdown** — o entregável humano também é vinculável. É o que faz um reteste distinguir "o alvo foi corrigido" de "a regra mudou". **Nota:** instalado por wheel (`pip install git+https…`, sem `.git`), o `commit` sai `null` — é honesto, não um SHA inventado. Para carimbá-lo no fluxo do quickstart, exporte `SENTINELA_COMMIT=$(git rev-parse HEAD)` (em CI já vem do checkout).
 - **Tipos estritos + imutabilidade:** `Finding`, `Target`, `Probe` e `Tag` são `@dataclass(frozen=True, slots=True)`; severidade é `IntEnum` (ordena do mais grave ao menos grave sem lógica extra).
 
 **Cadeia de suprimentos do próprio repo:** as actions do CI são fixadas por **SHA** (uma tag `@v4` é ponteiro móvel), com `persist-credentials: false`, e o **Dependabot** faz a outra metade — PRs agrupados por semana para `github-actions` e `pip`. É a mesma régua que a Esteira, a ferramenta de CI desta suíte, cobra de qualquer cliente.

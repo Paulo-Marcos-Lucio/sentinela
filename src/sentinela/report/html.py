@@ -9,6 +9,7 @@ from jinja2 import Environment
 from markupsafe import Markup, escape
 
 from sentinela.core.models import ScanResult
+from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo
 from sentinela.knowledge.mapping import tag_for
 from sentinela.knowledge.plain import INTRO_LEIGO, plain_for
 from sentinela.report._shared import (
@@ -78,6 +79,10 @@ def render_html(result: ScanResult) -> str:
         mode="Intrusivo (autorizado)" if result.intrusive else "Não-intrusivo",
         tool_version=result.tool_version,
         generated_at=result.started_at.strftime("%d/%m/%Y %H:%M UTC"),
+        # Proveniência no entregável humano (o HTML/PDF circula fora da equipe): commit diz
+        # QUAL código rodou; ruleset_hash, QUAL catálogo. Sem eles o laudo não é vinculável.
+        commit=descobrir_commit(),
+        ruleset_hash=hash_do_catalogo(),
         score=score,
         counts=counts,
         total=total,

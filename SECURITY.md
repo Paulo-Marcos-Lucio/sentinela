@@ -9,7 +9,12 @@ escrito** para testar.
 - O **modo padrão é não-intrusivo**: apenas observa o que o servidor já expõe a
   qualquer visitante (cabeçalhos HTTP, handshake TLS, consultas DNS públicas).
 - O **modo intrusivo** (`--autorizado`) é uma decisão consciente do operador, que
-  declara possuir autorização. Sem essa flag, nenhuma checagem ativa roda.
+  declara possuir autorização. Sem essa flag, o **fuzzing de rotas/arquivos sensíveis,
+  a sondagem de API e a de erro verboso não rodam** (são as checagens marcadas como
+  intrusivas). As checagens passivas rodam sempre; e a postura padrão é de baixo toque —
+  a descoberta de subdomínios exige `--descobrir`, e o inventário de métodos faz um
+  único `OPTIONS`. Em resumo: nada de fuzzing sem `--autorizado`, mas "passivo" aqui
+  significa baixo impacto, não zero pacote.
 
 ### Enquadramento legal (Brasil)
 

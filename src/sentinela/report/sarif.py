@@ -14,6 +14,7 @@ import hashlib
 import json
 
 from sentinela.core.models import Finding, ScanResult, Severity
+from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo
 from sentinela.knowledge.mapping import OWASP_EDICAO, tag_for
 
 # Nível SARIF por severidade (o vocabulário do SARIF tem só 4 níveis).
@@ -139,22 +140,27 @@ def _result(finding: Finding, target_url: str) -> dict[str, object]:
 def render_sarif(result: ScanResult) -> str:
     """Serializa o resultado da varredura como um documento SARIF 2.1.0."""
     findings = result.sorted_findings()
+    # Proveniência também no SARIF (o que sobe pro Code Scanning): ruleset_hash nas
+    # properties do run, e o commit no slot padrão `versionControlProvenance` quando
+    # conhecido — sem isso, um alerta no GitHub não se vincula ao código/catálogo que o gerou.
+    commit = descobrir_commit()
+    run: dict[str, object] = {
+        "tool": {
+            "driver": {
+                "name": "sentinela",
+                "informationUri": "https://github.com/Paulo-Marcos-Lucio/sentinela",
+                "version": result.tool_version,
+                "rules": _rule_descriptors(findings),
+            }
+        },
+        "properties": {"owasp_edition": OWASP_EDICAO, "ruleset_hash": hash_do_catalogo()},
+        "results": [_result(f, result.target.url) for f in findings],
+    }
+    if commit is not None:
+        run["versionControlProvenance"] = [{"revisionId": commit}]
     document = {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "sentinela",
-                        "informationUri": "https://github.com/Paulo-Marcos-Lucio/sentinela",
-                        "version": result.tool_version,
-                        "rules": _rule_descriptors(findings),
-                    }
-                },
-                "properties": {"owasp_edition": OWASP_EDICAO},
-                "results": [_result(f, result.target.url) for f in findings],
-            }
-        ],
+        "runs": [run],
     }
     return json.dumps(document, indent=2, ensure_ascii=False)

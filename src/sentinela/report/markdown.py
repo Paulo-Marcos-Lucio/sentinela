@@ -6,6 +6,7 @@ import re
 from collections.abc import Callable
 
 from sentinela.core.models import Finding, ScanResult, Severity
+from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo
 from sentinela.knowledge.mapping import tag_for
 from sentinela.report._shared import grouped_by_category, ordered_counts, score_of
 
@@ -47,6 +48,12 @@ def render_markdown(result: ScanResult) -> str:
     a(
         f"> Gerado pela **Sentinela v{result.tool_version}** · "
         f"{result.started_at.strftime('%d/%m/%Y %H:%M UTC')}"
+    )
+    # Proveniência também no entregável humano (não só no JSON): o HTML/PDF é o que mais
+    # circula fora da equipe, e sem o selo o cliente não vincula o laudo ao código/regras.
+    _commit = descobrir_commit()
+    a(
+        f"> Proveniência: commit `{_commit or '—'}` · ruleset `{hash_do_catalogo()}`"
     )
     a("")
     a("| Item | Valor |")
