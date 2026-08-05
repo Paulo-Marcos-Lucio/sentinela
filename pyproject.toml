@@ -54,12 +54,16 @@ dependencies = [
   "certifi>=2024.2.2",
 ]
 
+# Pisos das ferramentas de dev subidos para as versões efetivamente instaladas e
+# testadas neste repo (portões verdes com elas). Piso, não pino: o Dependabot ainda
+# pode propor um degrau acima — mas o CI e a máquina do dev partem da mesma linha de
+# base, não de uma versão de 2022 que já não roda igual.
 [project.optional-dependencies]
 dev = [
-  "ruff>=0.6",
-  "mypy>=1.11",
-  "pytest>=8.2",
-  "pytest-cov>=5.0",
+  "ruff>=0.16",
+  "mypy>=2.3",
+  "pytest>=9.1",
+  "pytest-cov>=7.1",
 ]
 
 [project.urls]
