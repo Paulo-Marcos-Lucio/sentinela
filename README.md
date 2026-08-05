@@ -325,7 +325,7 @@ ruff check . && ruff format --check . && mypy src && pytest
 **Precisa de um diagnóstico de segurança na sua aplicação web?**
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Conversar-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/paulo-marcos-a07379174/)
-[![Email](https://img.shields.io/badge/E--mail-pmlsp23%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:pmlsp23@gmail.com)
+[![Email](https://img.shields.io/badge/E--mail-pmlsp23%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:contatopml26@gmail.com)
 [![Site](https://img.shields.io/badge/Site-paulo--marcos--lucio.github.io-0f766e)](https://paulo-marcos-lucio.github.io)
 
 </div>

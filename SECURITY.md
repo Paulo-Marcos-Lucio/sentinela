@@ -37,7 +37,7 @@ de qualquer teste.
 Encontrou uma vulnerabilidade **nesta ferramenta**? Por favor, reporte de forma
 privada:
 
-- E-mail: **pmlsp23@gmail.com** (assunto: `[security] sentinela`)
+- E-mail: **contatopml26@gmail.com** (assunto: `[security] sentinela`)
 
 Peço a gentileza de **não** abrir uma issue pública antes de darmos tempo para uma
 correção. Reconheço o recebimento e trabalho a correção com prioridade, coordenando

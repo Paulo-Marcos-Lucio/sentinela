@@ -11,7 +11,7 @@ description = "Diagnóstico não-intrusivo de segurança para aplicações web, 
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "Paulo Marcos Lucio", email = "pmlsp23@gmail.com" }]
+authors = [{ name = "Paulo Marcos Lucio", email = "contatopml26@gmail.com" }]
 keywords = [
   "security", "appsec", "web-security", "owasp", "tls", "http-headers",
   "vulnerability-assessment", "seguranca", "pentest", "lgpd",

@@ -21,7 +21,7 @@ profissional.
 
 ## Aplicação
 
-Casos de comportamento abusivo podem ser reportados a **pmlsp23@gmail.com**. Todas
+Casos de comportamento abusivo podem ser reportados a **contatopml26@gmail.com**. Todas
 as reclamações serão analisadas e resultarão em uma resposta considerada necessária
 e apropriada às circunstâncias.
 
