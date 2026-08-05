@@ -52,9 +52,7 @@ def render_markdown(result: ScanResult) -> str:
     # Proveniência também no entregável humano (não só no JSON): o HTML/PDF é o que mais
     # circula fora da equipe, e sem o selo o cliente não vincula o laudo ao código/regras.
     _commit = descobrir_commit()
-    a(
-        f"> Proveniência: commit `{_commit or '—'}` · ruleset `{hash_do_catalogo()}`"
-    )
+    a(f"> Proveniência: commit `{_commit or '—'}` · ruleset `{hash_do_catalogo()}`")
     a("")
     a("| Item | Valor |")
     a("| --- | --- |")

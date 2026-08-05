@@ -32,6 +32,14 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   (autorização por escrito, com escopo). O aviso em tempo de execução continua.
 
 ### Adicionado
+- **Selo de proveniência em todos os formatos** (auditoria cruzada 2026-08-05): `commit` +
+  `ruleset_hash` passam a aparecer também no **HTML/Markdown** (cabeçalho/rodapé) e no
+  **SARIF** (`run.properties.ruleset_hash` + `run.versionControlProvenance`), não só no
+  JSON — o entregável humano e o que sobe pro Code Scanning também ficam vinculáveis. Com
+  teste de regressão que falha se um refactor futuro dropar o selo de qualquer formato.
+- **Testes property-based (Hypothesis)** da defesa anti-SSRF: geram milhares de endereços e
+  afirmam as invariantes que fixam a classe do bypass — toda faixa reservada/CGNAT é
+  bloqueada e `::ffff:X` decide igual a `X`.
 - **Proveniência no envelope do relatório JSON**: `commit` (SHA de 40 hex do código que
   rodou), `ruleset_hash` (sha256 do catálogo — ids, escala de severidade e taxonomia) e
   `artifact_sha256` (sha256 do próprio documento, calculado sobre ele *sem* esse campo,
