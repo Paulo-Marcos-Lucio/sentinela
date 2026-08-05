@@ -35,7 +35,8 @@ privada:
 - E-mail: **pmlsp23@gmail.com** (assunto: `[security] sentinela`)
 
 Peço a gentileza de **não** abrir uma issue pública antes de darmos tempo para uma
-correção. Comprometo-me a responder em até 5 dias úteis.
+correção. Reconheço o recebimento e trabalho a correção com prioridade, coordenando
+a divulgação com quem reportou.
 
 ## Escopo
 

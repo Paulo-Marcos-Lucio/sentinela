@@ -22,7 +22,9 @@ make format    # formata com ruff
 ```
 
 O CI roda lint (ruff), formatação, tipos (mypy strict) e testes (pytest) em
-Python 3.10–3.12. PRs precisam passar em todos.
+Python 3.10–3.13. PRs precisam passar em todos. Além disso, um job de
+autoauditoria roda a própria Sentinela contra um alvo local (dogfood), o
+CodeQL analisa o código e a revisão de dependências barra pacote vulnerável no PR.
 
 ## Adicionando uma nova checagem
 
