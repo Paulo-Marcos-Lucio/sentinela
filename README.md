@@ -1,3 +1,5 @@
+<p align="right"><a href="README.en.md">🇺🇸 Read in English</a></p>
+
 <a href="https://paulo-marcos-lucio.github.io"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/banner-abismo-v2.svg" alt="Sentinela — o olho que vela a superfície da sua aplicação: diagnóstico externo de segurança web (TLS, cabeçalhos, cookies, CORS, DNS/e-mail, subdomínios)" width="100%"/></a>
 
 <div align="center">
@@ -325,7 +327,7 @@ ruff check . && ruff format --check . && mypy src && pytest
 **Precisa de um diagnóstico de segurança na sua aplicação web?**
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Conversar-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/paulo-marcos-a07379174/)
-[![Email](https://img.shields.io/badge/E--mail-pmlsp23%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:contatopml26@gmail.com)
+[![Email](https://img.shields.io/badge/E--mail-contatopml26%40gmail.com-EA4335?logo=gmail&logoColor=white)](mailto:contatopml26@gmail.com)
 [![Site](https://img.shields.io/badge/Site-paulo--marcos--lucio.github.io-0f766e)](https://paulo-marcos-lucio.github.io)
 
 </div>
