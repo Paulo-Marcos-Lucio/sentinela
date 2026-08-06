@@ -1,3 +1,5 @@
+<p align="center"><a href="CONTRIBUTING.en.md"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/btn-lang-en.svg" alt="Read this document in English" width="300"/></a></p>
+
 # Contribuindo com a Sentinela
 
 Obrigado pelo interesse! Contribuições — issues, correções, novas checagens — são

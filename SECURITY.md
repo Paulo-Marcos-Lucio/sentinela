@@ -1,3 +1,5 @@
+<p align="center"><a href="SECURITY.en.md"><img src="https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/btn-lang-en.svg" alt="Read this document in English" width="300"/></a></p>
+
 # Política de Segurança e Uso Ético
 
 ## Uso autorizado
