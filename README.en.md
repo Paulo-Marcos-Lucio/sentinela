@@ -182,9 +182,7 @@ python -m http.server 8899
 sentinela scan http://127.0.0.1:8899 --perfil rapido
 ```
 
-Expected summary output (`http.server` has neither HTTPS nor security headers — the tool's
-human-facing text, including this output, is Portuguese by design; see **PT-BR is a conscious
-decision** below):
+Expected summary output (`http.server` has neither HTTPS nor security headers):
 
 ```
  D   55/100          Alta 1 · Média 2 · Baixa 3 · Informativa 2
@@ -219,8 +217,8 @@ It's the difference between reading the facade and **seeing beneath the surface*
 
 <div align="center">
 
-[![Packages and pricing](https://img.shields.io/badge/Pacotes_e_valores-paulo--marcos--lucio.github.io-0f766e?style=for-the-badge)](https://paulo-marcos-lucio.github.io)
-[![Talk on LinkedIn](https://img.shields.io/badge/LinkedIn-Falar_agora-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/paulo-marcos-a07379174/)
+[![Packages and pricing](https://img.shields.io/badge/Packages_and_pricing-paulo--marcos--lucio.github.io-0f766e?style=for-the-badge)](https://paulo-marcos-lucio.github.io)
+[![Talk on LinkedIn](https://img.shields.io/badge/LinkedIn-Talk_now-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/paulo-marcos-a07379174/)
 
 </div>
 
