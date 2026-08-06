@@ -14,13 +14,13 @@
 
 [![CI](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml/badge.svg)](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/codeql.yml/badge.svg)](https://github.com/Paulo-Marcos-Lucio/sentinela/actions/workflows/codeql.yml)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Ruff](https://img.shields.io/badge/lint-ruff-261230.svg)](https://github.com/astral-sh/ruff)
-[![Checked with mypy](https://img.shields.io/badge/mypy-strict-2A6DB2.svg)](https://mypy-lang.org/)
-[![OWASP Top 10:2025](https://img.shields.io/badge/OWASP-Top%2010%3A2025-000000.svg)](https://owasp.org/Top10/2025/)
-[![Tests](https://img.shields.io/badge/tests-351%20passing-brightgreen.svg)](#-engineering-quality--method)
-[![Coverage](https://img.shields.io/badge/coverage-93%25-brightgreen.svg)](#-engineering-quality--method)
+[![Python 3.10+](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-python.svg)](https://www.python.org/)
+[![MIT License](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-license.svg)](LICENSE)
+[![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
+[![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
+[![351 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
+[![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-engineering-quality--method)
 
 </div>
 
