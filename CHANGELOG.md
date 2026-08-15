@@ -7,6 +7,8 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [0.5.0] — 2026-08-14
+
 ### Segurança
 - **Bomba de descompressão contida.** O teto `max_body_bytes` era aplicado *depois* da
   descompressão feita pelo `httpx`: uma bomba de 64 MiB de zeros (~64 KB na rede) levava o
@@ -223,5 +225,6 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 - Perfis de varredura (`--perfil completo|rapido`): o modo `rapido` pula as checagens de rede
   extra (TLS, DNS/e-mail e robots.txt) para uma triagem ágil.
 
-[Não lançado]: https://github.com/Paulo-Marcos-Lucio/sentinela/compare/v0.1.0...HEAD
+[Não lançado]: https://github.com/Paulo-Marcos-Lucio/sentinela/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Paulo-Marcos-Lucio/sentinela/compare/v0.1.0...v0.5.0
 [0.1.0]: https://github.com/Paulo-Marcos-Lucio/sentinela/releases/tag/v0.1.0
