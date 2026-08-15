@@ -93,8 +93,7 @@ def classificar(diff: str) -> tuple[bool, list[str]]:
 
     if not comuns:
         return False, [
-            "nenhuma troca de versão pôde ser lida do diff — "
-            "sem prova de que é não-major, não mescla"
+            "nenhuma troca de versão pôde ser lida do diff — sem prova de que é não-major, não mescla"
         ]
 
     explicacoes = []
@@ -103,20 +102,14 @@ def classificar(diff: str) -> tuple[bool, list[str]]:
         antes, agora = removidas[chave], adicionadas[chave]
         if agora[0] != antes[0]:
             majores.append(chave)
-            explicacoes.append(
-                f"MAJOR: {chave} {antes[0]}.{antes[1]} -> {agora[0]}.{agora[1]}"
-            )
+            explicacoes.append(f"MAJOR: {chave} {antes[0]}.{antes[1]} -> {agora[0]}.{agora[1]}")
         else:
-            explicacoes.append(
-                f"ok: {chave} {antes[0]}.{antes[1]} -> {agora[0]}.{agora[1]}"
-            )
+            explicacoes.append(f"ok: {chave} {antes[0]}.{antes[1]} -> {agora[0]}.{agora[1]}")
 
     # Versão que só aparece de um lado é troca que não conseguimos comparar.
-    orfas = sorted((set(removidas) ^ set(adicionadas)))
+    orfas = sorted(set(removidas) ^ set(adicionadas))
     if orfas:
-        explicacoes.append(
-            "não comparável (aparece só de um lado do diff): " + ", ".join(orfas[:8])
-        )
+        explicacoes.append("não comparável (aparece só de um lado do diff): " + ", ".join(orfas[:8]))
         return False, explicacoes
 
     return not majores, explicacoes
