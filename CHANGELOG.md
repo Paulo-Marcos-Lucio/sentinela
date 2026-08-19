@@ -7,6 +7,20 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **`Finding.type` e `Finding.confidence` no modelo e no JSON** (EV-01). `type`
+  (`observation` · `hardening` · `attack_surface` · `suspected_vulnerability` ·
+  `confirmed_vulnerability` · `inconclusive` · `analysis_error` · `info`) separa o que o
+  achado AFIRMA da severidade — uma checagem que só notou a ausência de um cabeçalho e
+  uma que provou uma falha exploravel podiam sair as duas como `critical`, indistinguíveis
+  para um consumidor por máquina. `confidence` (`low` · `medium` · `high`) declara o
+  quanto a própria checagem confia no achado. Default de ambos é o que MENOS afirma —
+  `observation`/`low` — nunca o que mais afirma por omissão: nenhuma checagem do catálogo
+  foi revisada ainda para declarar valor explícito (isso é EV-02/EV-03, itens
+  subsequentes), e um relatório de segurança não pode inflar "vulnerabilidade confirmada"
+  por causa de um default ruim. Mudança aditiva no contrato `suite-appsec/1` — nenhum
+  campo existente foi removido.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança

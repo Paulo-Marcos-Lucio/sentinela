@@ -88,6 +88,58 @@ _SEVERITY_COLORS: dict[Severity, str] = {
 }
 
 
+class FindingType(str, Enum):
+    """O que o achado AFIRMA sobre o alvo — ortogonal à severidade.
+
+    ``Severity`` mede "quão grave seria se fosse verdade"; ``FindingType`` mede "o que,
+    de fato, foi verificado". Uma severidade CRITICAL sozinha não diz se a checagem
+    confirmou exploração ou só notou uma condição que favorece um ataque — e o consumidor
+    do JSON (dashboard, triagem automatizada) precisa da distinção para não tratar uma
+    observação de hardening como incidente confirmado.
+
+    - ``OBSERVATION``: uma condição notada, sem julgamento de risco embutido.
+    - ``HARDENING``: falta um controle defensivo (cabeçalho, cookie flag) — não é
+      exploração comprovada nem tentada, é a ausência de uma camada de proteção.
+    - ``ATTACK_SURFACE``: algo alcançável de fora (rota exposta, porta aberta) que
+      amplia o que um atacante pode tentar, sem que a checagem tenha tentado explorar.
+    - ``SUSPECTED_VULNERABILITY``: indício de falha real, não confirmado pela checagem
+      (a checagem é não-intrusiva por padrão e frequentemente não tenta provar).
+    - ``CONFIRMED_VULNERABILITY``: a checagem provou a falha (ex.: resposta observada
+      de uma exploração bem-sucedida), não apenas um sinal indireto.
+    - ``INCONCLUSIVE``: a checagem rodou mas não conseguiu decidir (resposta ambígua).
+    - ``ANALYSIS_ERROR``: a checagem não rodou até o fim (rede, timeout, exceção) — não
+      é um veredito sobre o alvo, é a ausência de um.
+    - ``INFO``: contexto que não é achado de risco (ex.: versão de software detectada).
+    """
+
+    OBSERVATION = "observation"
+    HARDENING = "hardening"
+    ATTACK_SURFACE = "attack_surface"
+    SUSPECTED_VULNERABILITY = "suspected_vulnerability"
+    CONFIRMED_VULNERABILITY = "confirmed_vulnerability"
+    INCONCLUSIVE = "inconclusive"
+    ANALYSIS_ERROR = "analysis_error"
+    INFO = "info"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.value
+
+
+class Confidence(str, Enum):
+    """Quão confiável é o achado em si — não é a severidade, é a certeza da checagem.
+
+    Uma checagem que compara uma string num corpo de resposta tem confiança menor que
+    uma que decodifica um certificado X.509 e lê a data de expiração dele.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.value
+
+
 class Category(str, Enum):
     """Domínio técnico de cada checagem, usado para agrupar o relatório."""
 
@@ -131,6 +183,24 @@ class Finding:
     É o que dá identidade de INSTÂNCIA no SARIF: sem ele, três subdomain takeovers
     distintos declaravam o mesmo ``partialFingerprints`` e o GitHub os fundia num alerta
     só — o cliente corrigia um e achava que tinha acabado.
+    """
+    type: FindingType = FindingType.OBSERVATION
+    """O que o achado afirma provar (ver :class:`FindingType`).
+
+    Default SEGURO, não neutro: uma checagem que ainda não foi revisada para declarar o
+    tipo explícito cai em ``OBSERVATION`` — a classificação que menos afirma —, nunca em
+    ``CONFIRMED_VULNERABILITY``. Errar por subclassificar gera, no pior caso, um achado
+    real etiquetado como observação; errar por superclassificar por omissão inflaria a
+    contagem de "vulnerabilidade confirmada" do relatório sem nenhuma checagem ter
+    provado nada, o que é o erro que um laudo de segurança não pode cometer em silêncio.
+    """
+    confidence: Confidence = Confidence.LOW
+    """Confiança da checagem no próprio achado (ver :class:`Confidence`).
+
+    Default SEGURO: ``LOW`` até a checagem declarar o contrário. O consumidor do JSON
+    que filtra por confiança alta não deve receber, por omissão de metadado, achados que
+    ninguém calibrou — a ausência de declaração tem de se comportar como incerteza, não
+    como certeza.
     """
 
     def __post_init__(self) -> None:
