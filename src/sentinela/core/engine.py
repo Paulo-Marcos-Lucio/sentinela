@@ -138,6 +138,16 @@ def run_scan(
                 result.extend(findings)
                 result.checks_run.append(check_id)
 
+        # Lidos só AQUI, depois que todas as threads da varredura já se juntaram (o
+        # `with ThreadPoolExecutor` acima bloqueia até isso acontecer) — sem essa ordem,
+        # ler `ctx.skipped`/`client.truncations` no meio da varredura veria uma lista
+        # parcial, dependente de qual checagem por acaso já tinha rodado.
+        result.checks_skipped.extend(ctx.skipped)
+        # `getattr` com default: testes de motor substituem `HttpClient` por um cliente
+        # falso mínimo, sem essa contabilidade — não é contrato exigido de todo cliente,
+        # só o que o `HttpClient` real oferece.
+        result.truncations.extend(getattr(client, "truncations", ()))
+
     result.finished_at = datetime.now(timezone.utc)
     return result
 

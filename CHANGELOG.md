@@ -7,6 +7,15 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **Bloco `coverage` no `-f json`: `checks_skipped` e `truncations`.** Antes, uma
+  checagem que rodou e não achou nada, uma checagem que nem fazia sentido rodar
+  (TLS num alvo que só fala texto aberto) e uma resposta HTTP lida pela metade
+  convergiam no mesmo silêncio do relatório. `TlsChecker` agora declara
+  explicitamente quando não há endpoint TLS para avaliar, em vez de devolver zero
+  achados; `HttpClient` registra toda resposta truncada pelo teto de corpo. As
+  duas listas aparecem sempre no JSON, mesmo vazias.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança
