@@ -231,17 +231,21 @@ def test_run_sem_endpoint_tls_nao_inventa_achado(monkeypatch) -> None:  # type: 
 
 
 def test_run_certificado_ilegivel_tambem_e_pulado_e_nao_inventa_achado(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    import sentinela.checks.tls as mod
     from conftest import make_context, make_target
 
     # DER inválido: o handshake completou (não é o caso "sem endpoint" acima), mas o
     # certificado que veio não é interpretável — outra forma de "não deu para avaliar",
-    # com uma razão diferente.
-    monkeypatch.setattr(mod, "_fetch_certificate", lambda *a, **k: (b"nao-e-der-valido", "TLSv1.3", "X"))
-    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: None)
-    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
+    # com uma razão diferente. Monkeypatch por caminho de string (em vez de um segundo
+    # `import ... as mod` do módulo já importado no topo do arquivo): mesmo efeito,
+    # sem duplicar o import.
+    monkeypatch.setattr(
+        "sentinela.checks.tls._fetch_certificate",
+        lambda *a, **k: (b"nao-e-der-valido", "TLSv1.3", "X"),
+    )
+    monkeypatch.setattr("sentinela.checks.tls._trust_error", lambda *a, **k: None)
+    monkeypatch.setattr("sentinela.checks.tls._accepts_legacy_tls", lambda *a, **k: ([], []))
     ctx = make_context(target=make_target("https://example.com/"))
-    assert list(mod.TlsChecker().run(ctx)) == []
+    assert list(TlsChecker().run(ctx)) == []
     assert [s.check for s in ctx.skipped] == ["tls"]
     assert "certificado" in ctx.skipped[0].reason
 

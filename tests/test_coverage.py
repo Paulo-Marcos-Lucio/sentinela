@@ -22,8 +22,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+import sentinela.core.engine as engine
+from conftest import make_probe
 from sentinela.core.config import ScanConfig
-from sentinela.core.engine import run_scan
 from sentinela.core.models import CheckSkip, ScanResult, Target, Truncation
 from sentinela.core.target import parse_target
 from sentinela.report.json_report import render_json
@@ -65,7 +66,7 @@ def servidor_http_puro() -> Iterator[str]:
 # --------------------------------------------------------------------------- #
 def test_scan_de_alvo_http_declara_tls_pulado_em_vez_de_silencio(servidor_http_puro: str) -> None:
     target = parse_target(servidor_http_puro)
-    resultado = run_scan(target, ScanConfig(only=frozenset({"tls"})))
+    resultado = engine.run_scan(target, ScanConfig(only=frozenset({"tls"})))
 
     assert resultado.checks_run == ["tls"]  # a checagem RODOU...
     assert resultado.findings == []  # ...não achou achado nenhum...
@@ -84,7 +85,7 @@ def test_scan_completo_pula_so_tls_as_demais_checagens_seguem_normais(servidor_h
     # o skip aparece exatamente para `tls` — as outras doze checagens não são afetadas
     # pelo mecanismo novo, e a varredura como um todo continua produzindo achados.
     target = parse_target(servidor_http_puro)
-    resultado = run_scan(target, ScanConfig())
+    resultado = engine.run_scan(target, ScanConfig())
     assert [s.check for s in resultado.checks_skipped] == ["tls"]
     assert "security-headers" in resultado.checks_run
     assert resultado.findings  # HSTS/CSP ausentes etc. continuam sendo reportados
@@ -116,9 +117,6 @@ def test_coverage_serializa_skips_e_truncagens() -> None:
 # o motor só o lê depois que a pool de threads termina.
 # --------------------------------------------------------------------------- #
 def test_engine_copia_skips_e_truncagens_do_contexto_e_do_cliente(monkeypatch: pytest.MonkeyPatch) -> None:
-    import sentinela.core.engine as engine
-    from conftest import make_probe
-
     registrados: list[Truncation] = [Truncation(url="https://x/", limit_bytes=99)]
 
     class _HttpClientFalso:
@@ -149,8 +147,6 @@ def test_engine_copia_skips_e_truncagens_do_contexto_e_do_cliente(monkeypatch: p
 def test_engine_tolera_cliente_sem_contabilidade_de_truncagem(monkeypatch: pytest.MonkeyPatch) -> None:
     """Um cliente falso mínimo (o padrão dos testes de motor existentes) não tem
     `.truncations` — o motor não pode quebrar por isso, só reportar vazio."""
-    import sentinela.core.engine as engine
-    from conftest import make_probe
 
     class _HttpClientMinimo:
         def __init__(self, **_kw: object) -> None:
