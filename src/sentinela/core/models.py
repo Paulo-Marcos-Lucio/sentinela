@@ -177,6 +177,34 @@ class ScanError:
     message: str
 
 
+@dataclass(frozen=True, slots=True)
+class CheckSkip:
+    """Uma checagem inteira que não pôde ser avaliada, declarada — nunca silêncio.
+
+    Diferente de ``ScanError`` (uma checagem que TENTOU e falhou por exceção) e de uma
+    checagem que rodou e simplesmente não achou nada: aqui a checagem concluiu, de
+    propósito, que a pergunta que ela faz não se aplica ou não dá para responder desta
+    vez (ex.: TLS num alvo que só fala texto aberto). Antes disto, os três casos —
+    "não roda", "rodou e achou nada" e "tentou e explodiu" — convergiam no mesmo
+    silêncio: ausência de achado em ``findings``. Um relatório que não distingue os
+    três lê "não achei nada" como "está tudo bem", mesmo quando na verdade é "não
+    consegui olhar".
+    """
+
+    check: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class Truncation:
+    """Uma resposta HTTP que a varredura leu pela metade (teto de corpo, prazo,
+    conexão cortada), declarada para o consumidor por máquina — não só para o
+    humano que lê o rodapé de um achado ``*_NAO_AVALIADA``."""
+
+    url: str
+    limit_bytes: int
+
+
 @dataclass(slots=True)
 class ScanResult:
     """Resultado consolidado de uma varredura completa."""
@@ -185,6 +213,8 @@ class ScanResult:
     findings: list[Finding] = field(default_factory=list)
     errors: list[ScanError] = field(default_factory=list)
     checks_run: list[str] = field(default_factory=list)
+    checks_skipped: list[CheckSkip] = field(default_factory=list)
+    truncations: list[Truncation] = field(default_factory=list)
     intrusive: bool = False
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     finished_at: datetime | None = None

@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from sentinela.checks._util import is_ip, truncate
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
-from sentinela.core.models import Category, Finding, Severity
+from sentinela.core.models import Category, CheckSkip, Finding, Severity
 from sentinela.knowledge import references as ref
 
 # Timeout por handshake. Servidor OK responde em <1s; o teto só é atingido em host
@@ -62,10 +62,29 @@ class TlsChecker(Checker):
             legados, legados_nao_avaliados = legacy_future.result()
 
         if der is None:
-            return  # sem endpoint TLS acessível — não é papel desta checagem relatar
+            # Sem endpoint TLS acessível (porta fechada, handshake recusado ou tempo
+            # esgotado) — o caso comum é um alvo `http://` que nunca fala TLS. Antes
+            # disto a checagem só devolvia zero achados, indistinguível de "TLS
+            # impecável"; agora ela DECLARA que não deu para avaliar.
+            ctx.skipped.append(
+                CheckSkip(
+                    check=self.id,
+                    reason=(
+                        f"nenhum endpoint TLS acessível em {host}:{port} — handshake "
+                        "recusado ou tempo esgotado"
+                    ),
+                )
+            )
+            return
         try:
             cert = x509.load_der_x509_certificate(der)
         except ValueError:
+            ctx.skipped.append(
+                CheckSkip(
+                    check=self.id,
+                    reason=f"certificado recebido de {host}:{port} não pôde ser interpretado (DER inválido)",
+                )
+            )
             return
 
         yield from self._check_relogio(ctx)

@@ -48,6 +48,13 @@ def render_json(result: ScanResult) -> str:
         "finished_at": result.finished_at.isoformat() if result.finished_at else None,
         "duration_seconds": round(result.duration_seconds, 2),
         "checks_run": result.checks_run,
+        # O que a varredura sabe que NÃO conseguiu olhar — nunca ausente, mesmo vazio,
+        # pelo mesmo motivo de `by_severity` sempre trazer as cinco chaves: um consumidor
+        # que faz `coverage["checks_skipped"]` não pode quebrar num relatório completo.
+        "coverage": {
+            "checks_skipped": [{"check": s.check, "reason": s.reason} for s in result.checks_skipped],
+            "truncations": [{"url": t.url, "limit_bytes": t.limit_bytes} for t in result.truncations],
+        },
         "summary": {
             "total": len(result.findings),
             "by_severity": {sev.name.lower(): counts[sev] for sev in SEVERITY_ORDER},

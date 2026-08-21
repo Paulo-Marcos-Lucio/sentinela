@@ -27,6 +27,7 @@ from typing import Any
 
 import httpx
 
+from sentinela.core.models import Truncation
 from sentinela.version import __version__
 
 USER_AGENT = f"Sentinela/{__version__} (+https://github.com/Paulo-Marcos-Lucio/sentinela)"
@@ -107,6 +108,12 @@ class HttpClient:
     verify_tls: bool = True
     max_body_bytes: int = 4096
     _client: httpx.Client = field(init=False)
+    truncations: list[Truncation] = field(init=False, default_factory=list)
+    """Toda resposta lida pela metade nesta varredura — ``core.engine.run_scan`` copia
+    isto para ``ScanResult.truncations`` no fim. Um único :class:`HttpClient` atende
+    TODAS as checagens de uma varredura (a mesma instância viaja em ``ScanContext``),
+    então acumular aqui é o único lugar central que vê toda requisição, sem precisar
+    que cada uma das treze checagens relate a própria truncagem de volta."""
 
     def __post_init__(self) -> None:
         self._client = httpx.Client(
@@ -207,6 +214,8 @@ class HttpClient:
 
                     body_snippet, truncado, lidos = self._read_capped(response, cap)
                     elapsed_ms = _safe_elapsed(response)
+                    if truncado:
+                        self.truncations.append(Truncation(url=final_url, limit_bytes=cap))
                     break
         except (httpx.HTTPError, httpx.InvalidURL, OSError) as exc:
             return Probe(url=url, status_code=0, headers={}, error=_describe(exc))
