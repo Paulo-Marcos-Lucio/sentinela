@@ -50,6 +50,9 @@ def test_json_estruturado_valido() -> None:
     assert achado["severity_rank"] == 2
     assert achado["owasp"] == "A02:2025 Security Misconfiguration"
     assert data["summary"]["score"]["grade"] in {"A", "B", "C", "D", "F"}
+    # `EV-04`: achado passivo nunca alega prova, e sempre declara o que não demonstra.
+    assert achado["exploitability_proven"] is False
+    assert achado["not_proven"]
 
 
 def test_json_by_severity_traz_sempre_as_cinco_chaves() -> None:

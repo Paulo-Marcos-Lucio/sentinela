@@ -107,6 +107,16 @@ class Category(str, Enum):
         return self.value
 
 
+#: Default de ``Finding.not_proven`` para as checagens passivas (a grande maioria do
+#: catálogo hoje): elas observam um indício — cabeçalho ausente, cookie mal configurado
+#: — e nunca chegam a testar exploração de verdade. Não é um texto de preenchimento; é o
+#: mesmo tipo de omissão honesta que este item existe para fechar.
+NAO_PROVADO_PASSIVO: tuple[str, ...] = (
+    "que a condição observada é ativamente explorável no ambiente atual",
+    "qualquer tentativa de exploração — a checagem só observou a resposta, sem agir sobre o alvo",
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Finding:
     """Um achado individual da varredura.
@@ -132,12 +142,33 @@ class Finding:
     distintos declaravam o mesmo ``partialFingerprints`` e o GitHub os fundia num alerta
     só — o cliente corrigia um e achava que tinha acabado.
     """
+    exploitability_proven: bool = False
+    """Verdadeiro só quando a checagem comprovou a condição por AÇÃO real contra o alvo
+    (ex.: um GET que devolveu de volta o conteúdo sensível esperado) — nunca por
+    inferência passiva sobre um cabeçalho ausente ou uma configuração observada.
+
+    Só pode nascer ``True`` num achado de checagem intrusiva rodando em modo ativo
+    (``--autorizado``); ``ScanResult.add`` recusa qualquer achado que declare isto fora
+    desse modo — ver o docstring de lá.
+    """
+    not_proven: tuple[str, ...] = NAO_PROVADO_PASSIVO
+    """O que este achado especificamente NÃO demonstra — nunca vazio.
+
+    Existe para que o relatório não afirme mais do que a checagem realmente
+    estabeleceu. Um achado que reporta ausência de HSTS como se tivesse confirmado
+    downgrade attack é o mesmo tipo de superclassificação que ``EV-01`` endereçou para
+    severidade/tipo — este campo endereça a mesma pergunta para a alegação de prova.
+    """
 
     def __post_init__(self) -> None:
         if not self.id:
             raise ValueError("Finding.id não pode ser vazio")
         if not self.title:
             raise ValueError("Finding.title não pode ser vazio")
+        if not self.not_proven:
+            raise ValueError(
+                "Finding.not_proven não pode ser vazio — todo achado precisa declarar o que não demonstra"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,10 +231,28 @@ class ScanResult:
     """
 
     def add(self, finding: Finding) -> None:
+        """Anexa um achado, recusando uma alegação de prova fora do modo ativo.
+
+        ``exploitability_proven=True`` só pode se sustentar quando ESTA varredura
+        rodou com ``--autorizado`` (``self.intrusive``): é o único modo em que uma
+        checagem intrusiva chega a agir sobre o alvo em vez de só observá-lo (ver
+        `core.registry.build_checkers`, que já impede uma checagem intrusiva de sequer
+        rodar fora desse modo). O `ValueError` aqui é o segundo portão, não o primeiro —
+        fecha a classe inteira do defeito (uma checagem futura, ou um bug numa
+        existente, que declarasse prova sem ação real) em vez de confiar só na
+        montagem do catálogo para nunca errar.
+        """
+        if finding.exploitability_proven and not self.intrusive:
+            raise ValueError(
+                f"achado {finding.id!r} declara exploitability_proven=True fora do modo "
+                "ativo (--autorizado) — só uma varredura intrusiva pode afirmar prova de "
+                "exploração"
+            )
         self.findings.append(finding)
 
     def extend(self, findings: list[Finding]) -> None:
-        self.findings.extend(findings)
+        for finding in findings:
+            self.add(finding)
 
     def sorted_findings(self) -> list[Finding]:
         """Achados ordenados por severidade (desc.), depois categoria e título."""
