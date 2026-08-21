@@ -81,4 +81,9 @@ def _finding_dict(finding: Finding) -> dict[str, object]:
         "impact": finding.impact,
         "recommendation": finding.recommendation,
         "references": list(finding.references),
+        # Ver `core.models.Finding.exploitability_proven`/`.not_proven`: distingue achado
+        # comprovado por ação real (checagem intrusiva, modo ativo) de indício observado
+        # passivamente — a maioria do catálogo. `not_proven` nunca sai vazio.
+        "exploitability_proven": finding.exploitability_proven,
+        "not_proven": list(finding.not_proven),
     }
