@@ -201,6 +201,19 @@ def scan(
             ),
         ),
     ] = "alta",
+    revisor: Annotated[
+        str | None,
+        typer.Option(
+            "--revisor",
+            "--reviewer",
+            help=(
+                "Nome de quem revisou este laudo antes da entrega. Carimba "
+                "`review.reviewed=true` e `review.reviewer` em TODO achado do "
+                "relatório — sem isso, o campo fica no default (`reviewed: false`, "
+                "ninguém olhou)."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Executa uma varredura de diagnóstico no ALVO informado."""
     formatos = formato or [Formato.console]
@@ -244,6 +257,9 @@ def scan(
 
     with console.status(f"[green]Analisando {target.host}…", spinner="dots"):
         result = run_scan(target, config)
+
+    if revisor:
+        result.mark_reviewed(revisor)
 
     _emit(result, formatos, saida)
     _maybe_fail(result, limite, falhar_em)
