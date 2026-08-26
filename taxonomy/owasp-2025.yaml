@@ -1,0 +1,28 @@
+# OWASP Top 10:2025 (owasp.org/Top10/2025/) — fonte única dos rótulos usados em
+# knowledge/mapping.py e propagados para os relatórios (JSON/SARIF).
+#
+# tests/test_taxonomy.py falha se este arquivo divergir de `OWASP_EDICAO` e
+# `OWASP_TOP10_2025` no código — os dois precisam mudar juntos.
+
+edicao: '2025'
+categorias:
+- id: A01
+  rotulo: A01:2025 Broken Access Control
+- id: A02
+  rotulo: A02:2025 Security Misconfiguration
+- id: A03
+  rotulo: A03:2025 Software Supply Chain Failures
+- id: A04
+  rotulo: A04:2025 Cryptographic Failures
+- id: A05
+  rotulo: A05:2025 Injection
+- id: A06
+  rotulo: A06:2025 Insecure Design
+- id: A07
+  rotulo: A07:2025 Authentication Failures
+- id: A08
+  rotulo: A08:2025 Software or Data Integrity Failures
+- id: A09
+  rotulo: A09:2025 Security Logging and Alerting Failures
+- id: A10
+  rotulo: A10:2025 Mishandling of Exceptional Conditions
