@@ -175,6 +175,24 @@ def test_corpo_gigante_e_cortado_no_teto(alvo: str) -> None:
     assert len(_CORPO_GRANDE) > 4096  # o servidor tentou entregar 1 MB
 
 
+def test_corpo_gigante_e_registrado_em_truncations(alvo: str) -> None:
+    # EV-05: a truncagem não fica só no `Probe` individual — o cliente acumula para o
+    # `ScanResult.truncations` que `core.engine.run_scan` lê no fim da varredura inteira.
+    with HttpClient(timeout=10.0, max_body_bytes=4096) as client:
+        assert client.truncations == []
+        probe = client.request("GET", f"{alvo}/gigante")
+    assert len(client.truncations) == 1
+    registro = client.truncations[0]
+    assert registro.url == probe.final_url
+    assert registro.limit_bytes == 4096
+
+
+def test_corpo_completo_nao_gera_registro_de_truncagem(alvo: str) -> None:
+    with HttpClient(timeout=10.0, max_body_bytes=4096) as client:
+        client.request("GET", f"{alvo}/")
+    assert client.truncations == []
+
+
 def test_download_e_interrompido_no_teto_nao_apenas_truncado() -> None:
     """A promessa do docstring é "o download é interrompido", não "o texto é cortado".
 
