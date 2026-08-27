@@ -45,7 +45,9 @@ _TAGS: dict[str, Tag] = {
     "RELOGIO_LOCAL_DIVERGENTE": Tag(None, None, None),
     # Cabeçalhos de segurança -> A02 Security Misconfiguration
     "XCTO_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
-    "REFERRER_POLICY_AUSENTE": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "REFERRER_POLICY_AUSENTE": Tag(
+        A02, "CWE-200", "Exposure of Sensitive Information to an Unauthorized Actor"
+    ),
     "PERMISSIONS_POLICY_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "COOP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
@@ -55,7 +57,9 @@ _TAGS: dict[str, Tag] = {
     "CSP_WILDCARD_PERMISSIVO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_SEM_OBJECT_SRC": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_SEM_BASE_URI": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
-    "CLICKJACKING_SEM_PROTECAO": Tag(A02, "CWE-1021", "Improper Restriction of Rendered UI Layers"),
+    "CLICKJACKING_SEM_PROTECAO": Tag(
+        A02, "CWE-1021", "Improper Restriction of Rendered UI Layers or Frames"
+    ),
     "XXSS_PROTECTION_LEGADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     # Política entregue por <meta> em vez de cabeçalho: informativo (é legítimo), mas com
     # limite real — via <meta> o navegador ignora frame-ancestors/sandbox/report-uri.
@@ -70,7 +74,9 @@ _TAGS: dict[str, Tag] = {
     "COOKIE_SEM_HTTPONLY": Tag(A07, "CWE-1004", "Sensitive Cookie Without 'HttpOnly' Flag"),
     "COOKIE_SEM_HTTPONLY_FUNCIONAL": Tag(A07, "CWE-1004", "Sensitive Cookie Without 'HttpOnly' Flag"),
     "COOKIE_CSRF_LEGIVEL_POR_JS": Tag(None, None, None),
-    "COOKIE_SEM_SECURE": Tag(A04, "CWE-614", "Sensitive Cookie Without 'Secure' Attribute"),
+    "COOKIE_SEM_SECURE": Tag(
+        A04, "CWE-614", "Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+    ),
     "COOKIE_SEM_SAMESITE": Tag(A01, "CWE-352", "Cross-Site Request Forgery (CSRF)"),
     "COOKIE_SAMESITE_NONE_INSEGURO": Tag(
         A01, "CWE-1275", "Sensitive Cookie with Improper SameSite Attribute"
@@ -82,23 +88,37 @@ _TAGS: dict[str, Tag] = {
     "FORM_ACTION_INSEGURA": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "SENHA_SEM_HTTPS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     # CORS
-    "CORS_REFLEXAO_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
-    "CORS_CURINGA_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
-    "CORS_REFLEXAO_ORIGEM": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
+    "CORS_REFLEXAO_COM_CREDENCIAIS": Tag(
+        A01, "CWE-942", "Permissive Cross-domain Security Policy with Untrusted Domains"
+    ),
+    "CORS_CURINGA_COM_CREDENCIAIS": Tag(
+        A01, "CWE-942", "Permissive Cross-domain Security Policy with Untrusted Domains"
+    ),
+    "CORS_REFLEXAO_ORIGEM": Tag(
+        A01, "CWE-942", "Permissive Cross-domain Security Policy with Untrusted Domains"
+    ),
     # Métodos HTTP
     "HTTP_TRACE_HABILITADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "HTTP_METODOS_PERIGOSOS": Tag(A02, "CWE-650", "Trusting HTTP Permission Methods on the Server Side"),
     # Exposição de informação
-    "VERSAO_STACK_EXPOSTA": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "VERSAO_STACK_EXPOSTA": Tag(
+        A02, "CWE-200", "Exposure of Sensitive Information to an Unauthorized Actor"
+    ),
     "LISTAGEM_DIRETORIO": Tag(A02, "CWE-548", "Exposure of Information Through Directory Listing"),
     # Arquivos/rotas sensíveis
-    "GIT_EXPOSTO": Tag(A02, "CWE-527", "Exposure of Version-Control Repository to Web"),
-    "DOTENV_EXPOSTO": Tag(
-        A02, "CWE-538", "Insertion of Sensitive Information into Externally-Accessible File"
+    "GIT_EXPOSTO": Tag(
+        A02, "CWE-527", "Exposure of Version-Control Repository to an Unauthorized Control Sphere"
     ),
-    "SVN_EXPOSTO": Tag(A02, "CWE-527", "Exposure of Version-Control Repository to Web"),
-    "APACHE_STATUS_EXPOSTO": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
-    "PHPINFO_EXPOSTO": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "DOTENV_EXPOSTO": Tag(
+        A02, "CWE-538", "Insertion of Sensitive Information into Externally-Accessible File or Directory"
+    ),
+    "SVN_EXPOSTO": Tag(
+        A02, "CWE-527", "Exposure of Version-Control Repository to an Unauthorized Control Sphere"
+    ),
+    "APACHE_STATUS_EXPOSTO": Tag(
+        A02, "CWE-200", "Exposure of Sensitive Information to an Unauthorized Actor"
+    ),
+    "PHPINFO_EXPOSTO": Tag(A02, "CWE-200", "Exposure of Sensitive Information to an Unauthorized Actor"),
     # TLS / certificado -> A04 Cryptographic Failures
     "CERT_EXPIRADO": Tag(A04, "CWE-298", "Improper Validation of Certificate Expiration"),
     "CERT_EXPIRANDO": Tag(A04, "CWE-298", "Improper Validation of Certificate Expiration"),
@@ -122,7 +142,9 @@ _TAGS: dict[str, Tag] = {
     "MTA_STS_AUSENTE": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "TLS_RPT_AUSENTE": Tag(None, None, None),
     # Recon passiva de arquivos públicos
-    "ROBOTS_CAMINHOS_SENSIVEIS": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "ROBOTS_CAMINHOS_SENSIVEIS": Tag(
+        A02, "CWE-200", "Exposure of Sensitive Information to an Unauthorized Actor"
+    ),
     # Superfície de ataque / subdomínios
     "SUPERFICIE_SUBDOMINIOS": Tag(None, None, None),
     "SUBDOMAIN_TAKEOVER": Tag(A02, "CWE-284", "Improper Access Control"),
@@ -136,15 +158,17 @@ _TAGS: dict[str, Tag] = {
     # Higiene / processo (sem OWASP direto)
     "SECURITY_TXT_AUSENTE": Tag(None, None, None),
     # Superfície de formulários e injeção (checker passivo `forms`)
-    "SENHA_EM_GET": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
+    "SENHA_EM_GET": Tag(A07, "CWE-598", "Use of HTTP Request With Sensitive Query String"),
     "FORMULARIO_CREDENCIAL_SEM_HTTPS": Tag(
         A04, "CWE-319", "Cleartext Transmission of Sensitive Information"
     ),
     "CSRF_TOKEN_AUSENTE": Tag(A01, "CWE-352", "Cross-Site Request Forgery (CSRF)"),
     "REFLEXAO_DE_PARAMETRO": Tag(
-        A05, "CWE-79", "Improper Neutralization of Input During Web Page Generation (XSS)"
+        A05,
+        "CWE-79",
+        "Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')",
     ),
-    "DADO_SENSIVEL_NA_URL": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
+    "DADO_SENSIVEL_NA_URL": Tag(A07, "CWE-598", "Use of HTTP Request With Sensitive Query String"),
 }
 
 

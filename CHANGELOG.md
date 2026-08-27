@@ -7,6 +7,17 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido
+- **`cwe_name` divergente do nome oficial do MITRE em 8 dos 24 CWEs usados por
+  `knowledge/mapping.py`** (`CWE-79`, `CWE-200`, `CWE-527`, `CWE-538`, `CWE-598`,
+  `CWE-614`, `CWE-942`, `CWE-1021`) — paráfrase ou abreviação feita à mão (ex.:
+  "Exposure of Sensitive Information" em vez de "...to an Unauthorized Actor", "(XSS)"
+  em vez de "('Cross-site Scripting')") que ia direto para o relatório (JSON/SARIF/
+  Markdown/HTML) como se fosse a nomenclatura padrão do mercado. `tests/
+  test_taxonomia_coerencia.py` tranca a classe: falha se `cwe_name` divergir do nome
+  fixado a partir de cwe.mitre.org, ou se o mesmo CWE aparecer com categorias OWASP
+  diferentes em achados distintos.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança
