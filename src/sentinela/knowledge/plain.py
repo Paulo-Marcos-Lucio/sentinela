@@ -388,6 +388,42 @@ _PLAIN: dict[str, str] = {
         "Um dado secreto (token, senha) vai escrito na etiqueta de endereço — e essa etiqueta é "
         "copiada em todo livro de registro, histórico e recado a terceiros. Segredo não é lugar de URL."
     ),
+    # --- Contexto da resposta: o que respondeu NÃO era a loja ---
+    "ALVO_BLOQUEADO": (
+        "Quem atendeu à porta foi o segurança da rua (um WAF/CDN), não a loja: ele barrou a "
+        "vistoria com um 'acesso negado'. Tudo o que veríamos aí é a parede do segurança, não a "
+        "sua loja — por isso a avaliação dos itens da loja foi suspensa, não fingida."
+    ),
+    "RESPOSTA_DE_ERRO": (
+        "O endereço vistoriado respondeu com uma página de erro (404/500), não com a loja. "
+        "Avaliar os cabeçalhos dessa página de erro seria laudar o objeto errado — então essas "
+        "checagens foram suspensas."
+    ),
+    "ALVO_REDIRECIONADO_OUTRO_HOST": (
+        "Ao bater na porta, fomos encaminhados para OUTRO endereço (outro host). A partir dali, o "
+        "que a vistoria olhou é a loja de lá, não a que você pediu — e o relatório declara essa "
+        "troca para não atribuir a você o que é de um terceiro."
+    ),
+    "CSP_SEM_SCRIPT_SRC": (
+        "A lista de fornecedores existe, mas não diz uma palavra sobre QUEM pode entregar SCRIPT. "
+        "Sem essa regra, o navegador aceita rodar qualquer script — na prática é quase como não ter "
+        "lista nenhuma para o que mais importa (proteção contra XSS)."
+    ),
+    "CORS_NULL_COM_CREDENCIAIS": (
+        "Seu site aceita um 'cliente sem identificação' (origem `null`) e ainda entrega os dados do "
+        "usuário logado a ele. Esse 'sem identificação' é fácil de forjar (uma janela sanfonada, um "
+        "arquivo local) — é dar a chave do cofre a quem se recusa a dizer quem é."
+    ),
+    "METODOS_NAO_AVALIADOS": (
+        "Perguntamos ao servidor quais 'comandos' ele aceita e ele não respondeu a lista. Isso NÃO "
+        "quer dizer que só aceita os inofensivos — quer dizer que não deu para saber. Dizer que "
+        "está tudo bem a partir desse silêncio seria enganoso."
+    ),
+    "FORMS_NAO_AVALIADO": (
+        "A página veio pela metade (a rede cortou antes do fim), e um formulário mais adiante pode "
+        "não ter sido visto. Isto não afirma que não há formulário inseguro — afirma que não deu "
+        "para conferir por inteiro."
+    ),
 }
 
 

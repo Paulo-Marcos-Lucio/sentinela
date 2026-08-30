@@ -28,6 +28,8 @@ class CorsChecker(Checker):
     def run(self, ctx: ScanContext) -> Iterable[Finding]:
         if not ctx.primary.ok:
             return  # host inalcançável: não gastar outro timeout sondando o mesmo alvo
+        if not ctx.avaliar_cabecalhos:
+            return  # resposta é bloqueio/erro, não o alvo (classe C2)
         probe = ctx.client.get(ctx.target.url, headers={"Origin": _PROBE_ORIGIN})
         if not probe.ok:
             return
@@ -39,8 +41,32 @@ class CorsChecker(Checker):
 
         reflete = acao.strip() == _PROBE_ORIGIN
         curinga = acao.strip() == "*"
+        nulo = acao.strip().lower() == "null"
 
-        if reflete and acac:
+        if nulo and acac:
+            yield Finding(
+                id="CORS_NULL_COM_CREDENCIAIS",
+                title="CORS aceita a origem `null` com credenciais",
+                category=self.category,
+                severity=Severity.HIGH,
+                description=(
+                    "O servidor respondeu `Access-Control-Allow-Origin: null` com "
+                    "`Access-Control-Allow-Credentials: true`."
+                ),
+                evidence="Access-Control-Allow-Origin: null; credentials=true",
+                impact=(
+                    "A origem `null` é atribuída a contextos como iframes com sandbox, "
+                    "documentos `data:`/`file:` e alguns redirecionamentos — todos controláveis "
+                    "por um atacante. Aceitá-la com credenciais equivale a refletir uma origem "
+                    "arbitrária: um site hostil consegue ler respostas autenticadas da API."
+                ),
+                recommendation=(
+                    "Nunca ecoe `null` em `Access-Control-Allow-Origin`. Valide `Origin` contra "
+                    "uma allowlist estrita e só combine com credenciais para origens confiáveis."
+                ),
+                references=(ref.MDN_CORS, ref.OWASP_CORS),
+            )
+        elif reflete and acac:
             yield Finding(
                 id="CORS_REFLEXAO_COM_CREDENCIAIS",
                 title="CORS reflete qualquer origem com credenciais",

@@ -34,15 +34,31 @@ _ATTR_SCAN = 2048
 
 # Sub-recursos carregados por HTTP (conteúdo misto). Só elementos que BUSCAM
 # recurso — ``<a href>`` é navegação, não conteúdo misto, e fica de fora.
+# Atributos SEM ASPAS são válidos em HTML5 (§13.1.2.3) e o navegador carrega o recurso —
+# exigir aspas deixava `src=http://...` escapar de conteúdo misto (classe FN-05). Por isso
+# a aspa é opcional (`["\']?`).
 _HTTP_RESOURCE_RE = re.compile(
     rf"<(?:script|img|iframe|source|embed|audio|video|track|object)\b[^>]{{0,{_ATTR_SCAN}}}?"
-    r"\b(?:src|data)\s*=\s*[\"']http://([^\"'>\s]+)",
+    r"\b(?:src|data)\s*=\s*[\"']?http://([^\"'>\s]+)",
     re.IGNORECASE,
 )
-_HTTP_LINK_RE = re.compile(
-    rf"<link\b[^>]{{0,{_ATTR_SCAN}}}?\bhref\s*=\s*[\"']http://([^\"'>\s]+)",
+# rel de <link> que REALMENTE busca sub-recurso (conteúdo misto de fato). `canonical`,
+# `alternate` (RSS), `dns-prefetch`, `preconnect` são referências/hints, não carregam nada:
+# marcá-los como conteúdo misto era falso positivo (classe C6).
+_REL_FETCHING_RE = re.compile(
+    r"\brel\s*=\s*[\"']?[^\"'>]*\b(?:stylesheet|preload|modulepreload|prefetch|prerender|"
+    r"icon|shortcut|apple-touch-icon|mask-icon|manifest)\b",
     re.IGNORECASE,
 )
+_HREF_HTTP_RE = re.compile(r"\bhref\s*=\s*[\"']?http://([^\"'>\s]+)", re.IGNORECASE)
+_COMENTARIO_HTML_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def _sem_comentarios(body: str) -> str:
+    """Remove blocos `<!-- ... -->`. Tag comentada não é carregada pelo navegador — contá-la
+    como conteúdo misto/senha/formulário é falso positivo (classe C6)."""
+    return _COMENTARIO_HTML_RE.sub("", body)
+
 
 _SCRIPT_TAG_RE = re.compile(rf"<script\b[^>]{{0,{_ATTR_SCAN}}}>", re.IGNORECASE)
 _LINK_TAG_RE = re.compile(rf"<link\b[^>]{{0,{_ATTR_SCAN}}}>", re.IGNORECASE)
@@ -52,10 +68,10 @@ _REL_STYLESHEET_RE = re.compile(r"\brel\s*=\s*[\"'][^\"']*\bstylesheet\b", re.IG
 _INTEGRITY_RE = re.compile(r"\bintegrity\s*=", re.IGNORECASE)
 
 _FORM_ACTION_HTTP_RE = re.compile(
-    rf"<form\b[^>]{{0,{_ATTR_SCAN}}}?\baction\s*=\s*[\"']http://([^\"'>\s]+)", re.IGNORECASE
+    rf"<form\b[^>]{{0,{_ATTR_SCAN}}}?\baction\s*=\s*[\"']?http://([^\"'>\s]+)", re.IGNORECASE
 )
 _PASSWORD_INPUT_RE = re.compile(
-    rf"<input\b[^>]{{0,{_ATTR_SCAN}}}?\btype\s*=\s*[\"']password[\"']", re.IGNORECASE
+    rf"<input\b[^>]{{0,{_ATTR_SCAN}}}?\btype\s*=\s*[\"']?password\b", re.IGNORECASE
 )
 
 _MAX_EVIDENCIA = 5
@@ -89,7 +105,11 @@ class ContentChecker(Checker):
         probe = ctx.primary
         if not probe.ok or not probe.body_snippet:
             return
-        body = probe.body_snippet
+        if not ctx.avaliar_documento:
+            # Resposta não-HTML (JSON/CSS) ou página de bloqueio: as checagens de conteúdo
+            # são de documento HTML e não se aplicam (classes C2/C6).
+            return
+        body = _sem_comentarios(probe.body_snippet)
         serves_https = probe.final_url.startswith("https://") or ctx.target.is_https
 
         yield from self._check_mixed_content(body, serves_https)
@@ -102,7 +122,12 @@ class ContentChecker(Checker):
         if not serves_https:
             return  # conteúdo misto só existe numa página HTTPS
         urls = {m.group(1) for m in _HTTP_RESOURCE_RE.finditer(body)}
-        urls |= {m.group(1) for m in _HTTP_LINK_RE.finditer(body)}
+        for tag in _LINK_TAG_RE.findall(body):
+            if not _REL_FETCHING_RE.search(tag):
+                continue  # canonical/alternate/dns-prefetch não carregam recurso (C6)
+            m = _HREF_HTTP_RE.search(tag)
+            if m:
+                urls.add(m.group(1))
         if not urls:
             return
         amostra = sorted(urls)[:_MAX_EVIDENCIA]

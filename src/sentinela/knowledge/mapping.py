@@ -43,6 +43,13 @@ _TAGS: dict[str, Tag] = {
     "TLS_LEGADO_NAO_AVALIADO": Tag(None, None, None),
     "DESCOBERTA_NAO_AVALIADA": Tag(None, None, None),
     "RELOGIO_LOCAL_DIVERGENTE": Tag(None, None, None),
+    "METODOS_NAO_AVALIADOS": Tag(None, None, None),
+    "FORMS_NAO_AVALIADO": Tag(None, None, None),
+    # Contexto da resposta primária: NÃO são vulnerabilidade do alvo, são o motor declarando
+    # que o objeto avaliado não é o alvo (página de bloqueio/erro/outro host) — classe C2/FN-01.
+    "ALVO_BLOQUEADO": Tag(None, None, None),
+    "RESPOSTA_DE_ERRO": Tag(None, None, None),
+    "ALVO_REDIRECIONADO_OUTRO_HOST": Tag(None, None, None),
     # Cabeçalhos de segurança -> A02 Security Misconfiguration
     "XCTO_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "REFERRER_POLICY_AUSENTE": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
@@ -55,6 +62,7 @@ _TAGS: dict[str, Tag] = {
     "CSP_WILDCARD_PERMISSIVO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_SEM_OBJECT_SRC": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CSP_SEM_BASE_URI": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
+    "CSP_SEM_SCRIPT_SRC": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "CLICKJACKING_SEM_PROTECAO": Tag(A02, "CWE-1021", "Improper Restriction of Rendered UI Layers"),
     "XXSS_PROTECTION_LEGADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     # Política entregue por <meta> em vez de cabeçalho: informativo (é legítimo), mas com
@@ -85,6 +93,7 @@ _TAGS: dict[str, Tag] = {
     "CORS_REFLEXAO_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
     "CORS_CURINGA_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
     "CORS_REFLEXAO_ORIGEM": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
+    "CORS_NULL_COM_CREDENCIAIS": Tag(A01, "CWE-942", "Permissive Cross-domain Policy"),
     # Métodos HTTP
     "HTTP_TRACE_HABILITADO": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "HTTP_METODOS_PERIGOSOS": Tag(A02, "CWE-650", "Trusting HTTP Permission Methods on the Server Side"),

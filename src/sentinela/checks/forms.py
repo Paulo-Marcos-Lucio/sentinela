@@ -45,6 +45,7 @@ class _Campo:
 class _Form:
     method: str  # "get" | "post"
     action: str
+    metodo_explicito: bool = False
     campos: list[_Campo] = field(default_factory=list)
 
     @property
@@ -61,10 +62,11 @@ class _Form:
 # classe de DoS que o F100 matou em content.py); aqui o escaneamento de cada tag tem
 # teto de bytes, então nenhum `<...>` gigante sem `>` degrada a varredura.
 _ATTR_SCAN = 2048  # teto de bytes lidos por tag (igual ao content.py)
-_FORM_RE = re.compile(rf"<form\b([^>]{{0,{_ATTR_SCAN}}})>(.*?)</form>", re.IGNORECASE | re.DOTALL)
+_FORM_OPEN_RE = re.compile(rf"<form\b([^>]{{0,{_ATTR_SCAN}}})>", re.IGNORECASE)
 _CAMPO_RE = re.compile(rf"<(?:input|textarea|select)\b([^>]{{0,{_ATTR_SCAN}}})>", re.IGNORECASE)
 _A_METHOD = re.compile(r"""\bmethod\s*=\s*["']?\s*([a-zA-Z]+)""", re.IGNORECASE)
-_A_ACTION = re.compile(r"""\baction\s*=\s*["']([^"']*)["']""", re.IGNORECASE)
+# action com ou SEM aspas (HTML5 §13.1.2.3): sem isso, `action=http://...` escapava (FN-05).
+_A_ACTION = re.compile(r"""\baction\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_NAME = re.compile(r"""\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_TYPE = re.compile(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 
@@ -78,19 +80,33 @@ def _attr(regex: re.Pattern[str], texto: str) -> str:
 
 
 def _coletar_forms(html: str) -> list[_Form]:
-    """Formulários e seus campos, com escaneamento limitado por tag (não trava em
-    entrada hostil). `<form>` sem `</form>` de fechamento é ignorado — trade-off de
-    robustez a favor de nunca degradar."""
+    """Formulários e campos, com escaneamento limitado por tag (não trava em entrada hostil).
+
+    O `</form>` pode ser OMITIDO em HTML5 (fecha implicitamente em `</body>` ou no próximo
+    `<form>`): por isso o interior vai do fim da abertura até o `</form>`, o próximo `<form>`
+    ou o fim do documento — o que vier antes. Antes, um form sem fechamento era simplesmente
+    ignorado e o CSRF ausente passava batido (caso form-sem-fechamento)."""
     forms: list[_Form] = []
-    for m in _FORM_RE.finditer(html):
-        cabecalho, interior = m.group(1), m.group(2)
-        metodo = (_attr(_A_METHOD, cabecalho) or "get").strip().lower()
+    aberturas = list(_FORM_OPEN_RE.finditer(html))
+    baixo = html.lower()
+    for i, m in enumerate(aberturas):
+        cabecalho = m.group(1)
+        inicio = m.end()
+        fim = len(html)
+        fech = baixo.find("</form>", inicio)
+        if fech != -1:
+            fim = fech
+        if i + 1 < len(aberturas):
+            fim = min(fim, aberturas[i + 1].start())
+        interior = html[inicio:fim]
+        metodo_raw = _attr(_A_METHOD, cabecalho)
+        metodo = (metodo_raw or "get").strip().lower()
         action = _attr(_A_ACTION, cabecalho)
         campos = [
             _Campo(name=_attr(_A_NAME, t), type=(_attr(_A_TYPE, t) or "text").strip().lower())
             for t in _CAMPO_RE.findall(interior)
         ]
-        forms.append(_Form(method=metodo, action=action, campos=campos))
+        forms.append(_Form(method=metodo, action=action, metodo_explicito=bool(metodo_raw), campos=campos))
     return forms
 
 
@@ -106,19 +122,31 @@ class FormsChecker(Checker):
         probe = ctx.primary
         if probe is None or not probe.ok:
             return
+        if not ctx.avaliar_cabecalhos:
+            return  # resposta é bloqueio/erro, não o alvo (classe C2)
         html = probe.body_snippet or ""
 
-        yield from self._forms(html)
+        yield from self._forms(html, probe.truncated)
         yield from self._reflexao(html, ctx)
         yield from self._dado_sensivel_na_url(ctx)
 
     # --- formulários ------------------------------------------------------- #
-    def _forms(self, html: str) -> Iterable[Finding]:
+    def _forms(self, html: str, truncado: bool = False) -> Iterable[Finding]:
         senha_get = False
         form_http = False
         csrf_ausente = False
+        # Padrão SPA/Rails: o token de CSRF vem num `<meta name="csrf-token">` e o JavaScript
+        # o injeta no cabeçalho (X-CSRF-Token) de cada requisição — não há campo escondido no
+        # form. Sem reconhecer isso, todo formulário POST de app assim rendia CSRF_TOKEN_AUSENTE
+        # (falso positivo). csrf-param é o par do Rails.
+        tem_csrf_meta = bool(
+            re.search(r'<meta\b[^>]*\bname\s*=\s*[\'"]?csrf-(?:token|param)', html, re.IGNORECASE)
+        )
         for f in _coletar_forms(html):
-            if f.method == "get" and f.tem_senha:
+            # SENHA_EM_GET só quando o method=get é EXPLÍCITO: um <form> sem method/action
+            # controlado por JS (fetch/XHR) NÃO submete pela URL — cobrar credencial-em-GET
+            # dele é falso positivo (classe C8). O default "get" do HTML não basta aqui.
+            if f.method == "get" and f.metodo_explicito and f.tem_senha:
                 senha_get = True
             # Form com credencial cujo `action` aponta para http:// (conteúdo misto). O caso
             # "página inteira em HTTP com campo de senha" já é coberto por SENHA_SEM_HTTPS
@@ -127,9 +155,31 @@ class FormsChecker(Checker):
                 form_http = True
             # CSRF só é exigível de formulário que MUDA estado (POST). Form GET de busca
             # não precisa de token — exigir seria falso positivo.
-            if f.method == "post" and not f.tem_csrf:
+            if f.method == "post" and not f.tem_csrf and not tem_csrf_meta:
                 csrf_ausente = True
 
+        if truncado:
+            yield Finding(
+                id="FORMS_NAO_AVALIADO",
+                title="Formulários não puderam ser avaliados por inteiro (corpo parcial)",
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    "O HTML foi lido apenas parcialmente (limite de leitura/prazo/conexão): um "
+                    "formulário mais adiante no documento pode não ter sido visto."
+                ),
+                evidence="corpo truncado",
+                impact=(
+                    "Este achado NÃO afirma que não há formulário inseguro: afirma que não deu "
+                    "para verificar. Afirmar ausência a partir de leitura parcial faria o mesmo "
+                    "alvo mudar de veredito conforme a rede."
+                ),
+                recommendation=(
+                    "Reexecute com `--timeout` maior ou numa conexão melhor para um veredito "
+                    "conclusivo sobre a superfície de formulários."
+                ),
+                references=(ref.OWASP_CSRF,),
+            )
         if senha_get:
             yield Finding(
                 id="SENHA_EM_GET",

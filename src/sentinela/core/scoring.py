@@ -89,9 +89,12 @@ def compute_score(findings: list[Finding]) -> Score:
     value = max(0, 100 - penalty)
     ids = {f.id for f in findings}
     inacessivel = "ALVO_INACESSIVEL" in ids
+    bloqueado = "ALVO_BLOQUEADO" in ids
     cert_quebrado = bool(ids & _CERT_QUEBRADO)
 
-    if inacessivel or cert_quebrado:
+    if inacessivel or bloqueado or cert_quebrado:
+        # Não avaliamos o alvo (inacessível, ou uma página de bloqueio de WAF/CDN respondeu
+        # no lugar dele, ou o certificado quebra a confiança): a nota não pode ser boa.
         value = min(value, 40)  # coerente com a faixa F (<45)
         grade = "F"
     else:
@@ -104,6 +107,14 @@ def compute_score(findings: list[Finding]) -> Score:
             "Não foi possível estabelecer a conexão principal com o alvo — a avaliação da "
             "superfície ficou incompleta. A nota reflete a impossibilidade de verificação, "
             "não um veredito de segurança."
+        )
+        return Score(value=value, grade=grade, summary=summary)
+    if bloqueado:
+        summary = (
+            "A resposta principal veio de uma camada de bloqueio (WAF/CDN), não da aplicação: "
+            "a superfície real do alvo não pôde ser avaliada. A nota reflete a impossibilidade "
+            "de verificação, não um veredito de segurança — reexecute a partir de um "
+            "IP/User-Agent autorizado."
         )
         return Score(value=value, grade=grade, summary=summary)
     if cert_quebrado:

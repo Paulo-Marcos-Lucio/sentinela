@@ -62,6 +62,11 @@ class Probe:
     final_url: str = ""
     redirect_chain: tuple[str, ...] = ()
     set_cookies: tuple[str, ...] = ()
+    headers_multi: tuple[tuple[str, str], ...] = ()
+    """Todos os pares (nome, valor) da resposta FINAL, sem colapsar duplicados. `headers`
+    (dict) junta cabeçalhos repetidos numa string por vírgula — o que corrompe a CSP: dois
+    `Content-Security-Policy` são DUAS políticas independentes (cada uma aplicada pelo
+    navegador), não uma lista separada por vírgula. `all_headers()` recupera os valores."""
     error: str | None = None
     elapsed_ms: float = 0.0
     truncated: bool = False
@@ -96,6 +101,14 @@ class Probe:
 
     def has_header(self, name: str) -> bool:
         return self.header(name) is not None
+
+    def all_headers(self, name: str) -> list[str]:
+        """TODOS os valores de um cabeçalho (case-insensitive), preservando duplicados.
+
+        Para `Content-Security-Policy`, cada valor é uma política independente que o
+        navegador aplica em conjunto (interseção). Colapsá-los perderia essa semântica."""
+        target = name.lower()
+        return [v for k, v in self.headers_multi if k.lower() == target]
 
 
 @dataclass(slots=True)
@@ -154,6 +167,15 @@ class HttpClient:
         cap = self.max_body_bytes if max_body_bytes is None else max_body_bytes
         chain: list[str] = []
         current = url
+        raw_multi: list[tuple[str, str]] = []
+        # O host que o operador pediu nesta requisição. Um redirect que volta para o
+        # MESMO host (o upgrade http->https clássico, no mesmo IP) é o alvo autorizado
+        # se redirecionando — a guarda anti-SSRF nunca pode bloqueá-lo (era o que dava
+        # ALVO_INACESSIVEL + nota F em toda VPS/staging interna com redirect http->https).
+        # Resolvido sob demanda (só no primeiro salto), para não custar um getaddrinfo
+        # em requisição que não redireciona.
+        alvo_host = httpx.URL(url).host or ""
+        alvo_ips: frozenset[str] | None = None
         status = 0
         resp_headers: dict[str, str] = {}
         set_cookies: list[str] = []
@@ -169,6 +191,7 @@ class HttpClient:
                     chain.append(current)
                     status = response.status_code
                     resp_headers = dict(response.headers)
+                    raw_multi = list(response.headers.multi_items())
                     final_url = str(response.url)
                     for key, value in response.headers.multi_items():
                         if key.lower() == "set-cookie":
@@ -178,7 +201,12 @@ class HttpClient:
                     is_redirect = 300 <= status < 400 and location is not None
                     if follow_redirects and is_redirect and hop < _MAX_REDIRECTS:
                         next_url = str(response.url.join(location))
-                        if _host_is_blocked(httpx.URL(next_url).host):
+                        next_host = httpx.URL(next_url).host
+                        if alvo_ips is None:
+                            alvo_ips = _resolver_ips(alvo_host)
+                        if not _redirect_do_alvo_permitido(
+                            url, next_url, alvo_host, alvo_ips
+                        ) and _host_is_blocked(next_host):
                             # Guarda anti-SSRF: não seguimos para host interno/privado.
                             #
                             # E falhamos ALTO. Antes disto o laço só dava `break` e o
@@ -219,6 +247,7 @@ class HttpClient:
             final_url=final_url,
             redirect_chain=tuple(chain),
             set_cookies=tuple(set_cookies),
+            headers_multi=tuple(raw_multi),
             elapsed_ms=elapsed_ms,
             truncated=truncado,
             bytes_lidos=lidos,
@@ -328,6 +357,82 @@ class _Descompressor:
         return saida
 
 
+def _normalizar_ip(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    """Desembrulha o IPv4 embutido num IPv6 mapeado (`::ffff:a.b.c.d` -> `a.b.c.d`)."""
+    mapeado = getattr(ip, "ipv4_mapped", None)
+    return mapeado if mapeado is not None else ip
+
+
+def _resolver_ips(host: str | None) -> frozenset[str]:
+    """Conjunto de IPs (normalizados) aos quais ``host`` resolve; vazio se não resolve.
+
+    Serve para comparar identidade de host por ENDEREÇO, não por string — dois nomes
+    que apontam para o mesmo IP são o mesmo destino.
+    """
+    if not host:
+        return frozenset()
+    try:
+        return frozenset({str(_normalizar_ip(ipaddress.ip_address(host)))})
+    except ValueError:
+        pass
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (OSError, UnicodeError):
+        return frozenset()
+    ips: set[str] = set()
+    for info in infos:
+        try:
+            ips.add(str(_normalizar_ip(ipaddress.ip_address(info[4][0]))))
+        except ValueError:
+            continue
+    return frozenset(ips)
+
+
+def _mesmo_host(next_host: str | None, alvo_host: str, alvo_ips: frozenset[str]) -> bool:
+    """``next_host`` é o MESMO host do alvo inicial? Igualdade literal (case-insensitive) OU
+    resolução para um subconjunto dos IPs do alvo (cobre CNAME/alias para o mesmo endereço)."""
+    if not next_host:
+        return False
+    if alvo_host and next_host.lower() == alvo_host.lower():
+        return True
+    ips = _resolver_ips(next_host)
+    return bool(ips) and ips <= alvo_ips
+
+
+_PORTA_PADRAO = {"http": 80, "https": 443}
+
+
+def _porta(u: httpx.URL) -> int | None:
+    return u.port if u.port is not None else _PORTA_PADRAO.get(u.scheme)
+
+
+def _redirect_do_alvo_permitido(
+    alvo_url: str, next_url: str, alvo_host: str, alvo_ips: frozenset[str]
+) -> bool:
+    """A guarda anti-SSRF deve uma exceção ao alvo escolhido pelo operador — mas SÓ para o
+    redirecionamento que é claramente o próprio alvo se apresentando de novo, não para
+    qualquer salto no mesmo host.
+
+    Liberamos duas formas, ambas no MESMO host do alvo:
+      * **upgrade http -> https** (o caso do mundo real: staging/VPS que responde em texto
+        aberto e manda para o TLS — antes isso virava ALVO_INACESSIVEL + nota F, classe C1);
+      * **mesma origem** (mesmo esquema e porta) — o redirect só troca o caminho.
+
+    NÃO liberamos um salto para OUTRA PORTA sem upgrade (ex.: http://host:8080 ->
+    http://host:9000): num host interno isso alcança um serviço DIFERENTE que o operador não
+    pediu — é exatamente o SSRF que a guarda existe para conter. Assim o upgrade legítimo passa
+    e o pivô lateral entre serviços internos continua bloqueado."""
+    n = httpx.URL(next_url)
+    if not _mesmo_host(n.host, alvo_host, alvo_ips):
+        return False
+    a = httpx.URL(alvo_url)
+    if a.scheme == "http" and n.scheme == "https":
+        return True
+    return a.scheme == n.scheme and _porta(a) == _porta(n)
+
+
 def _host_is_blocked(host: str | None) -> bool:
     """Verdadeiro se o host (literal ou resolvido) cai em faixa não-roteável/interna.
 
@@ -380,9 +485,7 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     host que `100.64.0.1`, escrito de outro jeito, e passava batido porque a checagem
     consultava as propriedades da forma IPv6 sem desembrulhar o IPv4 embutido.
     """
-    mapeado = getattr(ip, "ipv4_mapped", None)
-    if mapeado is not None:
-        ip = mapeado
+    ip = _normalizar_ip(ip)
     return (
         ip.is_private
         or ip.is_loopback

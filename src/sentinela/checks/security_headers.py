@@ -40,6 +40,10 @@ class _SimpleHeader:
     impact: str
     recommendation: str
     references: tuple[str, ...]
+    documento: bool = True
+    """Se True, só se aplica a um DOCUMENTO HTML (Referrer-Policy, Permissions-Policy, COOP
+    não fazem sentido num `application/json`). X-Content-Type-Options é de transporte
+    (nosniff protege qualquer resposta), então marca `documento=False` e roda sempre."""
 
 
 # Cabeçalhos cuja principal falha é simplesmente estarem ausentes.
@@ -49,6 +53,7 @@ _SIMPLE: tuple[_SimpleHeader, ...] = (
         finding_id="XCTO_AUSENTE",
         title="X-Content-Type-Options ausente",
         severity=Severity.LOW,
+        documento=False,
         impact=(
             "Sem 'nosniff', o navegador pode tentar adivinhar (MIME sniffing) o "
             "tipo de conteúdo e interpretar um arquivo como script, abrindo espaço "
@@ -115,12 +120,18 @@ class SecurityHeadersChecker(Checker):
         probe = ctx.primary
         if not probe.ok:
             return  # transporte falhou; o motor registra o erro à parte
+        if not ctx.avaliar_cabecalhos:
+            # A resposta primária é uma página de bloqueio (WAF/CDN) ou um erro — não o
+            # alvo. O motor já emitiu ALVO_BLOQUEADO/RESPOSTA_DE_ERRO. Afirmar "CSP
+            # ausente" a partir dela laudaria o objeto errado (classe C2/FN-01).
+            return
 
+        documento = ctx.avaliar_documento
         serves_https = probe.final_url.startswith("https://") or ctx.target.is_https
         # Hospedagem estática (GitHub Pages, S3, storage) NÃO emite cabeçalho: a política
         # vai em `<meta>` no HTML e o navegador a aplica. Ignorar isso rendia CSP_AUSENTE e
         # REFERRER_POLICY_AUSENTE falsos em todo site desse tipo.
-        meta = _politicas_via_meta(probe.body_snippet)
+        meta = _politicas_via_meta(probe.body_snippet) if documento else {}
         # Corpo truncado (teto de leitura, prazo estourado, conexão cortada) não autoriza
         # afirmar que uma política NÃO existe: a metatag pode estar nos bytes que não
         # chegaram. Medido: mesmo alvo, link rápido → CSP_VIA_META (informativo); link
@@ -128,10 +139,15 @@ class SecurityHeadersChecker(Checker):
         # há CSP num site que tem CSP, e recomendando implantar o que já está lá.
         corpo_parcial = probe.truncated and not meta
 
+        # HSTS e X-Content-Type-Options são de TRANSPORTE (valem para JSON/CSS também);
+        # CSP, anti-clickjacking, Referrer/Permissions/COOP são de DOCUMENTO.
         yield from self._check_hsts(probe, serves_https)
-        yield from self._check_csp(probe, meta.get("content-security-policy"), corpo_parcial)
-        yield from self._check_frame_options(probe)
+        if documento:
+            yield from self._check_csp(probe, meta.get("content-security-policy"), corpo_parcial)
+            yield from self._check_frame_options(probe)
         for spec in _SIMPLE:
+            if spec.documento and not documento:
+                continue
             if probe.has_header(spec.header):
                 continue
             if spec.header.lower() in meta:
@@ -147,7 +163,8 @@ class SecurityHeadersChecker(Checker):
                 references=spec.references,
             )
         yield from self._check_xss_protection(probe)
-        yield from self._check_politica_via_meta(probe, meta)
+        if documento:
+            yield from self._check_politica_via_meta(probe, meta)
 
     def _check_politica_via_meta(self, probe: Probe, meta: dict[str, str]) -> Iterable[Finding]:
         """Registra, de forma explícita, quais políticas vieram de `<meta>` e não de cabeçalho.
@@ -259,8 +276,12 @@ class SecurityHeadersChecker(Checker):
     def _check_csp(
         self, probe: Probe, csp_meta: str | None, corpo_parcial: bool = False
     ) -> Iterable[Finding]:
-        value = probe.header("Content-Security-Policy") or csp_meta
-        if value is None:
+        valores = probe.all_headers("Content-Security-Policy")
+        if not valores and probe.has_header("Content-Security-Policy"):
+            valores = [probe.header("Content-Security-Policy") or ""]
+        if csp_meta:
+            valores = [*valores, csp_meta]
+        if not valores:
             if corpo_parcial:
                 yield Finding(
                     id="CSP_NAO_AVALIADA",
@@ -326,49 +347,60 @@ class SecurityHeadersChecker(Checker):
             )
             return
 
-        directives = _parse_csp(value)
-        script = directives.get("script-src", directives.get("default-src", []))
-        # `script-src-elem`/`script-src-attr` (CSP3) sobrepõem `script-src` para tags e
-        # handlers inline. `unsafe-inline` em qualquer um deles é problema de SCRIPT.
-        # CSP3: na presença de 'strict-dynamic' o navegador IGNORA allowlists de host,
-        # esquemas e 'unsafe-inline' ao carregar script; na presença de nonce/hash (CSP2+)
-        # ele já ignora 'unsafe-inline'. Nas duas formas esses tokens são FALLBACK de
-        # compatibilidade — é exatamente a política que o Google recomenda em
-        # csp.withgoogle.com/docs/strict-csp. Acusá-los é recomendar o enfraquecimento
-        # de uma configuração correta.
-        nonce_ou_hash = any(t.startswith("'nonce-") or t.startswith("'sha") for t in script)
-        strict_dynamic = "'strict-dynamic'" in script
+        politicas = [_parse_csp(v) for v in valores]
+        # Merge (primeira-diretiva-vence) só para as checagens de FONTE (curinga/object/base).
+        directives: dict[str, list[str]] = {}
+        for pol in politicas:
+            for d, fontes in pol.items():
+                directives.setdefault(d, fontes)
+        value = "; ".join(valores)
+        strict_dynamic = any(
+            "'strict-dynamic'" in (p.get("script-src") or p.get("default-src") or []) for p in politicas
+        )
 
-        def _inline_ignorado(diretiva: str) -> bool:
-            if diretiva in ("script-src", "script-src-elem"):
-                return nonce_ou_hash or strict_dynamic
-            if diretiva == "default-src" and "script-src" not in directives:
-                # Sem script-src, o default-src É a fonte de script. Só nonce/hash faz o
-                # navegador ignorar 'unsafe-inline' também para o estilo inline que cai
-                # no mesmo fallback; 'strict-dynamic' não tem efeito sobre style-src.
-                return nonce_ou_hash
-            return False
+        # FN-02: se NENHUMA política governa a fonte de script (nem `script-src` nem
+        # `default-src`), a CSP não restringe scripts — para XSS equivale a não ter CSP
+        # (CSP Evaluator classifica "default-src/script-src ausente" como grave). Uma CSP
+        # só com `frame-ancestors` era lida como CSP boa e rendia dois LOW (FN-02).
+        governa_script = any("script-src" in p or "default-src" in p for p in politicas)
+        if not governa_script:
+            yield Finding(
+                id="CSP_SEM_SCRIPT_SRC",
+                title="CSP não restringe a origem dos scripts (sem script-src nem default-src)",
+                category=self.category,
+                severity=Severity.MEDIUM,
+                description=(
+                    "A CSP presente não define `script-src` nem `default-src`: nada limita de "
+                    "onde scripts podem ser carregados nem se inline pode executar."
+                ),
+                evidence=truncate(value),
+                impact=(
+                    "Sem `script-src`/`default-src`, a política não oferece defesa contra XSS — "
+                    "diretivas como `frame-ancestors` tratam de enquadramento, não de script."
+                ),
+                recommendation=(
+                    "Adicione `default-src 'self'` (ou um `script-src` explícito, idealmente com "
+                    "nonce/hash) para que a CSP realmente governe a execução de scripts."
+                ),
+                references=(ref.MDN_CSP, ref.OWASP_CSP_CHEATSHEET),
+            )
 
-        # O achado tem que dizer em QUAL diretiva está o problema. Uma política com
-        # `script-src 'self'` limpo e `unsafe-inline` só em `style-src` recebia um achado
-        # cujo título, impacto e recomendação falavam de `script-src` — o cliente abria a
-        # CSP, procurava no script-src, não achava nada, e perdia a confiança no laudo.
-        # Detecção conservadora está certa; redação errada é falso positivo do mesmo jeito.
+        # inline/eval EFETIVOS = permitidos por TODAS as políticas aplicadas (interseção que
+        # o navegador faz). Ler só a primeira política, ou juntá-las por vírgula, perdia a
+        # política mais fraca — justamente a que abre o buraco (FN-03: dois cabeçalhos CSP,
+        # ou diretiva duplicada em que a PRIMEIRA vale). `_parse_csp` já resolve a duplicata.
         script_afetado: list[str] = []
-        # `unsafe-eval` só faz sentido para script: em `style-src` o token é inerte.
-        if "'unsafe-eval'" in script:
-            script_afetado.append("'unsafe-eval'")  # 'strict-dynamic' NÃO neutraliza eval
-        if any(
-            "'unsafe-inline'" in fontes and not _inline_ignorado(d)
-            for d, fontes in directives.items()
-            if d in _DIRETIVAS_DE_SCRIPT or (d == "default-src" and "script-src" not in directives)
-        ):
+        if governa_script and all(_politica_permite_eval(p) for p in politicas):
+            script_afetado.append("'unsafe-eval'")
+        if governa_script and all(_politica_permite_inline(p) for p in politicas):
             script_afetado.append("'unsafe-inline'")
         script_afetado.sort()
 
-        estilo_afetado = any(
-            "'unsafe-inline'" in fontes for d, fontes in directives.items() if d in _DIRETIVAS_DE_ESTILO
-        ) or ("'unsafe-inline'" in directives.get("default-src", []) and "style-src" not in directives)
+        governa_estilo = any(
+            "style-src" in p or "style-src-elem" in p or "style-src-attr" in p or "default-src" in p
+            for p in politicas
+        )
+        estilo_afetado = governa_estilo and all(_politica_permite_estilo_inline(p) for p in politicas)
 
         if script_afetado:
             yield Finding(
@@ -476,28 +508,51 @@ class SecurityHeadersChecker(Checker):
             )
 
     def _check_frame_options(self, probe: Probe) -> Iterable[Finding]:
-        xfo = probe.header("X-Frame-Options")
-        # DELIBERADO: só a CSP de CABEÇALHO conta aqui. Numa CSP entregue por
-        # `<meta http-equiv>` o navegador IGNORA `frame-ancestors` — aceitar a meta
-        # aqui transformaria um site desprotegido contra clickjacking em "sem achado".
-        csp = (probe.header("Content-Security-Policy") or "").lower()
-        if xfo is None and "frame-ancestors" not in csp:
-            yield Finding(
-                id="CLICKJACKING_SEM_PROTECAO",
-                title="Sem proteção contra clickjacking",
-                category=self.category,
-                severity=Severity.MEDIUM,
-                description=("Não há `X-Frame-Options` nem a diretiva `frame-ancestors` na CSP."),
-                impact=(
-                    "A página pode ser embutida em um <iframe> de um site malicioso "
-                    "(clickjacking), induzindo o usuário a clicar em ações sem perceber."
-                ),
-                recommendation=(
-                    "Defina `Content-Security-Policy: frame-ancestors 'none'` (ou "
-                    "`'self'`) — abordagem moderna — e/ou `X-Frame-Options: DENY`."
-                ),
-                references=(ref.MDN_XFO, ref.OWASP_SECURE_HEADERS),
+        # Avaliar por VALOR, não por presença (FN-04). `X-Frame-Options` só protege com
+        # `DENY`/`SAMEORIGIN` (RFC 7034): `ALLOWALL` é inválido e `ALLOW-FROM` foi removido
+        # dos navegadores — ambos são ignorados. Em CSP, `frame-ancestors *` autoriza
+        # qualquer origem. Antes, a mera PRESENÇA do cabeçalho/diretiva contava como
+        # proteção, e um site enquadrável passava sem achado.
+        # Só a CSP de CABEÇALHO conta: numa CSP via `<meta>` o navegador ignora frame-ancestors.
+        xfo = (probe.header("X-Frame-Options") or "").strip()
+        valores_csp = probe.all_headers("Content-Security-Policy")
+        if not valores_csp and probe.has_header("Content-Security-Policy"):
+            valores_csp = [probe.header("Content-Security-Policy") or ""]
+        fa = _frame_ancestors(valores_csp)
+        protegido = xfo.upper() in ("DENY", "SAMEORIGIN") or (fa is not None and _fa_restritivo(fa))
+        if protegido:
+            return
+        presente_mas_ignorado = bool(xfo) or fa is not None
+        if presente_mas_ignorado:
+            descricao = (
+                "Há proteção anti-enquadramento declarada, mas com valor que os navegadores "
+                "IGNORAM: `X-Frame-Options` só aceita `DENY`/`SAMEORIGIN` (RFC 7034 — `ALLOWALL` "
+                "é inválido e `ALLOW-FROM` foi removido de Chrome/Firefox/Safari), e "
+                "`frame-ancestors *` autoriza qualquer origem a enquadrar a página."
             )
+            evidencia: str | None = (
+                f"X-Frame-Options: {xfo}" if xfo else f"frame-ancestors {' '.join(fa or [])}"
+            )
+        else:
+            descricao = "Não há `X-Frame-Options` nem a diretiva `frame-ancestors` na CSP."
+            evidencia = None
+        yield Finding(
+            id="CLICKJACKING_SEM_PROTECAO",
+            title="Sem proteção contra clickjacking",
+            category=self.category,
+            severity=Severity.MEDIUM,
+            description=descricao,
+            evidence=evidencia,
+            impact=(
+                "A página pode ser embutida em um <iframe> de um site malicioso "
+                "(clickjacking), induzindo o usuário a clicar em ações sem perceber."
+            ),
+            recommendation=(
+                "Defina `Content-Security-Policy: frame-ancestors 'none'` (ou "
+                "`'self'`) — abordagem moderna — e/ou `X-Frame-Options: DENY`."
+            ),
+            references=(ref.MDN_XFO, ref.OWASP_SECURE_HEADERS),
+        )
 
     def _check_xss_protection(self, probe: Probe) -> Iterable[Finding]:
         value = probe.header("X-XSS-Protection")
@@ -520,7 +575,9 @@ class SecurityHeadersChecker(Checker):
             )
 
 
-_MAX_AGE_RE = re.compile(r"max-age\s*=\s*(\d+)", re.IGNORECASE)
+# RFC 6797 §6.1: max-age pode vir como token OU quoted-string; os navegadores aceitam aspas.
+# Sem tolerá-las, `max-age="63072000"` era lido como ausente e virava HSTS_FRACO (FP).
+_MAX_AGE_RE = re.compile(r'max-age\s*=\s*"?\s*(\d+)', re.IGNORECASE)
 
 # Teto de atributos por tag (mesma defesa de O(n²) do checks/content.py) e teto de HTML
 # varrido: as metas de política ficam no `<head>`, não no fim de uma página de 256 KB.
@@ -564,10 +621,72 @@ def _parse_max_age(value: str) -> int | None:
 
 
 def _parse_csp(value: str) -> dict[str, list[str]]:
-    """CSP em ``{diretiva: [fontes]}`` (tudo minúsculo), para análise de diretivas."""
+    """CSP em ``{diretiva: [fontes]}`` (tudo minúsculo), para análise de diretivas.
+
+    CSP L3 §4.2.1.4: diretiva DUPLICADA na mesma política -> vale a PRIMEIRA, as seguintes
+    são ignoradas. Por isso ``setdefault`` (primeira vence) e não atribuição (que deixava a
+    última — mais permissiva — vencer, FN-03)."""
     directives: dict[str, list[str]] = {}
     for parte in value.split(";"):
         tokens = parte.split()
         if tokens:
-            directives[tokens[0].lower()] = [t.lower() for t in tokens[1:]]
+            directives.setdefault(tokens[0].lower(), [t.lower() for t in tokens[1:]])
     return directives
+
+
+def _fonte_de_script(directives: dict[str, list[str]]) -> list[str] | None:
+    return directives.get("script-src", directives.get("default-src"))
+
+
+def _politica_permite_inline(directives: dict[str, list[str]]) -> bool:
+    """A política, sozinha, deixaria script inline executar? nonce/hash/strict-dynamic
+    neutralizam `unsafe-inline`; política que nem governa script não bloqueia inline."""
+    fontes = _fonte_de_script(directives)
+    if fontes is None:
+        return True
+    if any(t.startswith("'nonce-") or t.startswith("'sha") for t in fontes) or "'strict-dynamic'" in fontes:
+        return False
+    return "'unsafe-inline'" in fontes
+
+
+def _politica_permite_eval(directives: dict[str, list[str]]) -> bool:
+    """`'strict-dynamic'` NÃO neutraliza `unsafe-eval` (só a origem de carga de script)."""
+    fontes = _fonte_de_script(directives)
+    if fontes is None:
+        return True
+    return "'unsafe-eval'" in fontes
+
+
+def _politica_permite_estilo_inline(directives: dict[str, list[str]]) -> bool:
+    fontes: list[str] | None = None
+    for d in _DIRETIVAS_DE_ESTILO:
+        if d in directives:
+            fontes = directives[d]
+            break
+    if fontes is None and "default-src" in directives:
+        fontes = directives["default-src"]
+    if fontes is None:
+        return True
+    if any(t.startswith("'nonce-") or t.startswith("'sha") for t in fontes):
+        return False
+    return "'unsafe-inline'" in fontes
+
+
+_FA_INSEGURO = frozenset({"*", "http:", "https:", "http://*", "https://*", "data:"})
+
+
+def _frame_ancestors(csp_values: list[str]) -> list[str] | None:
+    """Fontes de `frame-ancestors` da primeira política de CABEÇALHO que a define (o
+    navegador ignora frame-ancestors declarado por `<meta>`), ou None se nenhuma define."""
+    for v in csp_values:
+        d = _parse_csp(v)
+        if "frame-ancestors" in d:
+            return d["frame-ancestors"]
+    return None
+
+
+def _fa_restritivo(fontes: list[str]) -> bool:
+    """`frame-ancestors` que REALMENTE limita o enquadramento: não-vazio e sem curinga."""
+    if not fontes:
+        return False
+    return not any(t in _FA_INSEGURO for t in fontes)

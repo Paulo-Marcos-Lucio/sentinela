@@ -23,7 +23,12 @@ from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
 _GIT_HEAD_RE = re.compile(r"^(ref:\s+refs/|[0-9a-f]{40})", re.IGNORECASE)
-_ENV_RE = re.compile(r"^[A-Z0-9_]+\s*=", re.MULTILINE)
+# `export KEY=val` é sintaxe .env aceita (python-dotenv, dotenv-ruby, docker) e chaves
+# MINÚSCULAS são válidas (docker compose, php dotenv). O `^[A-Z0-9_]+=` antigo perdia as
+# duas formas — um .env real vazando senha passava batido (classe FN-08).
+_ENV_RE = re.compile(r"^(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=", re.MULTILINE)
+
+_GIT_CONFIG_RE = re.compile(r"\[core\]|repositoryformatversion|\[remote \"", re.IGNORECASE)
 
 
 def _is_git_head(body: str) -> bool:
@@ -35,6 +40,14 @@ def _is_dotenv(body: str) -> bool:
     if "<html" in lowered or "<!doctype" in lowered:
         return False
     return bool(_ENV_RE.search(body))
+
+
+def _is_git_config(body: str) -> bool:
+    """Formato do `.git/config` (INI git): seção `[core]`, `repositoryformatversion` ou
+    `[remote "..."]`. Assinatura de conteúdo — um 200 genérico não dispara."""
+    if "<html" in body.lower() or "<!doctype" in body.lower():
+        return False
+    return bool(_GIT_CONFIG_RE.search(body))
 
 
 def _is_svn_entries(body: str) -> bool:
@@ -77,6 +90,23 @@ _PATHS: tuple[_Path, ...] = (
         recommendation=(
             "Bloqueie o acesso a `/.git` no servidor web e nunca faça deploy do "
             "diretório de controle de versão para produção."
+        ),
+        references=(ref.OWASP_TOP10,),
+    ),
+    _Path(
+        path="/.git/config",
+        finding_id="GIT_EXPOSTO",
+        title="Repositório .git exposto (config)",
+        severity=Severity.CRITICAL,
+        signature=_is_git_config,
+        impact=(
+            "O arquivo de configuração do Git revela remotes, branches e a estrutura do "
+            "repositório, e sua presença indica que todo o diretório .git está acessível — "
+            "de onde se reconstrói o código-fonte e seus segredos."
+        ),
+        recommendation=(
+            "Bloqueie o acesso a `/.git` no servidor web e nunca faça deploy do diretório de "
+            "controle de versão para produção."
         ),
         references=(ref.OWASP_TOP10,),
     ),
@@ -166,7 +196,15 @@ class ExposureChecker(Checker):
     def _check_security_txt(self, ctx: ScanContext) -> Iterable[Finding]:
         url = urljoin(ctx.target.origin + "/", ".well-known/security.txt")
         probe = ctx.client.get(url)
-        presente = probe.ok and probe.status_code == 200 and "contact" in probe.body_snippet.lower()
+        # Um SPA com rota catch-all devolve 200 + HTML para QUALQUER caminho, e a substring
+        # "contact" aparece em quase toda página — lia-se um security.txt onde não há
+        # (falso NEGATIVO de SECURITY_TXT_AUSENTE). Exigir assinatura real: a resposta não
+        # pode ser HTML e precisa ter um campo `Contact:` no início de linha (RFC 9116).
+        corpo = probe.body_snippet or ""
+        ctype = (probe.header("Content-Type") or "").lower()
+        parece_html = "text/html" in ctype or "<html" in corpo.lower() or "<!doctype" in corpo.lower()
+        tem_campo_contact = re.search(r"(?im)^\s*contact\s*:", corpo) is not None
+        presente = probe.ok and probe.status_code == 200 and not parece_html and tem_campo_contact
         if not presente:
             yield Finding(
                 id="SECURITY_TXT_AUSENTE",
