@@ -51,12 +51,15 @@ _REL_FETCHING_RE = re.compile(
     re.IGNORECASE,
 )
 _HREF_HTTP_RE = re.compile(r"\bhref\s*=\s*[\"']?http://([^\"'>\s]+)", re.IGNORECASE)
-_COMENTARIO_HTML_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+# Bloco fechado `<!-- ... -->` OU um `<!--` sem fechamento (o navegador comenta o resto do
+# documento até o fim). Sem o 2º ramo, um comentário não-fechado deixava a cauda "descomentada"
+# e um `<img src=http://...>`/`type=password` ali dentro virava CONTEUDO_MISTO/senha falso (R1).
+_COMENTARIO_HTML_RE = re.compile(r"<!--.*?-->|<!--.*", re.DOTALL)
 
 
 def _sem_comentarios(body: str) -> str:
-    """Remove blocos `<!-- ... -->`. Tag comentada não é carregada pelo navegador — contá-la
-    como conteúdo misto/senha/formulário é falso positivo (classe C6)."""
+    """Remove blocos `<!-- ... -->` (e um `<!--` não-fechado até o fim). Tag comentada não é
+    carregada pelo navegador — contá-la como conteúdo misto/senha/formulário é FP (classe C6/R1)."""
     return _COMENTARIO_HTML_RE.sub("", body)
 
 

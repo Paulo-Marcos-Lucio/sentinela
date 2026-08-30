@@ -358,11 +358,15 @@ class SecurityHeadersChecker(Checker):
             "'strict-dynamic'" in (p.get("script-src") or p.get("default-src") or []) for p in politicas
         )
 
-        # FN-02: se NENHUMA política governa a fonte de script (nem `script-src` nem
-        # `default-src`), a CSP não restringe scripts — para XSS equivale a não ter CSP
-        # (CSP Evaluator classifica "default-src/script-src ausente" como grave). Uma CSP
-        # só com `frame-ancestors` era lida como CSP boa e rendia dois LOW (FN-02).
-        governa_script = any("script-src" in p or "default-src" in p for p in politicas)
+        # FN-02: se NENHUMA política governa a fonte de script, a CSP não restringe scripts —
+        # para XSS equivale a não ter CSP (CSP Evaluator classifica "default-src/script-src
+        # ausente" como grave). Uma CSP só com `frame-ancestors` era lida como CSP boa e rendia
+        # dois LOW (FN-02). "Governa script" inclui `script-src-elem`/`script-src-attr` (H6):
+        # `script-src-elem 'self'; script-src-attr 'none'` restringe a execução de scripts tão
+        # bem quanto `script-src` — acusá-la de "sem script-src" era falso (usa _DIRETIVAS_DE_SCRIPT).
+        governa_script = any(
+            any(d in p for d in _DIRETIVAS_DE_SCRIPT) or "default-src" in p for p in politicas
+        )
         if not governa_script:
             yield Finding(
                 id="CSP_SEM_SCRIPT_SRC",
@@ -635,7 +639,17 @@ def _parse_csp(value: str) -> dict[str, list[str]]:
 
 
 def _fonte_de_script(directives: dict[str, list[str]]) -> list[str] | None:
-    return directives.get("script-src", directives.get("default-src"))
+    """Fonte efetiva para avaliar inline/eval. Precedência: `script-src`; senão, a união de
+    `script-src-elem`/`script-src-attr` (que governam <script> e handlers inline — sem isso,
+    uma política só com essas diretivas cairia no fallback e reportaria inline permitido à toa,
+    H6); senão, `default-src`."""
+    if "script-src" in directives:
+        return directives["script-src"]
+    elem = directives.get("script-src-elem")
+    attr = directives.get("script-src-attr")
+    if elem is not None or attr is not None:
+        return (elem or []) + (attr or [])
+    return directives.get("default-src")
 
 
 def _politica_permite_inline(directives: dict[str, list[str]]) -> bool:

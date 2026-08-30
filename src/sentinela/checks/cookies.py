@@ -15,6 +15,7 @@ from sentinela.knowledge import references as ref
 @dataclass(frozen=True, slots=True)
 class _Cookie:
     name: str
+    value: str
     secure: bool
     http_only: bool
     same_site: str | None
@@ -48,9 +49,10 @@ _SESSAO_CONHECIDA = (
     "jwt",
 )
 
-# Dicas curtas/ambíguas: só valem como TOKEN inteiro do nome, nunca como substring solta.
-# 'access' NÃO pode marcar 'accessibility', nem 'sid' marcar 'sidebar' (classe C4/FN-07).
-_SESSAO_TOKENS = {
+# Tokens FORTES: como TOKEN inteiro do nome, são inequívocos de sessão/autenticação — não
+# casam por acaso com nome funcional. Só valem inteiros (nunca substring): 'sid' não marca
+# 'sidebar', 'auth' não marca 'author' (classe C4/FN-07).
+_SESSAO_TOKENS_FORTES = {
     "sess",
     "session",
     "sessao",
@@ -61,16 +63,38 @@ _SESSAO_TOKENS = {
     "token",
     "jwt",
     "sso",
-    "login",
     "logon",
     "logged",
-    "remember",
-    "access",
-    "refresh",
-    "identity",
     "credential",
     "credentials",
 }
+# Tokens AMBÍGUOS: palavras genéricas que aparecem em nomes FUNCIONAIS (`refresh_rate`,
+# `early_access`, `login_layout`, `remember_dismissed`). Sozinhas NÃO fazem sessão (era o
+# FP da classe H7) — só contam com um 2º indício: outro token de sessão no nome, OU um
+# valor com forma de ID/JWT (o que separa `remember_me=<token-longo>` de `remember_dismissed=1`).
+_SESSAO_TOKENS_AMBIGUOS = {
+    "login",
+    "access",
+    "refresh",
+    "identity",
+    "remember",
+}
+# União só para quem precisa saber "é algum token de sessão?" (o 2º indício textual).
+_SESSAO_TOKENS = _SESSAO_TOKENS_FORTES | _SESSAO_TOKENS_AMBIGUOS
+
+# Valor com cara de identificador de sessão: um JWT (três segmentos base64url) ou um blob
+# opaco longo e sem espaços (hex/base64 de >=16 chars). É o 2º indício que corrobora um
+# token ambíguo — `remember_me=eyJ...`/`=9f3c...` é sessão; `remember_dismissed=1` não.
+_JWT_RE = re.compile(r"^[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}$")
+_ID_OPACO_RE = re.compile(r"^[A-Za-z0-9._~%+/=-]{16,}$")
+
+
+def _valor_parece_id(value: str) -> bool:
+    """O valor tem forma de identificador de sessão (JWT ou blob opaco longo)?"""
+    v = value.strip()
+    if not v:
+        return False
+    return bool(_JWT_RE.match(v)) or bool(_ID_OPACO_RE.match(v))
 
 
 def _tokens_do_nome(name: str) -> list[str]:
@@ -95,11 +119,27 @@ def _is_csrf_like(name: str) -> bool:
     return any(h in lowered for h in _CSRF_HINTS) and not any(h in lowered for h in _SESSAO_FORTE)
 
 
-def _is_session_like(name: str) -> bool:
+def _is_session_like(name: str, value: str = "") -> bool:
+    """O cookie carrega sessão/autenticação? Exige um sinal FORTE, não só uma palavra genérica.
+
+    Reconhece: (1) nome de plataforma conhecida (substring inequívoca); (2) um token FORTE
+    inteiro no nome (`sess/sid/jwt/token/auth/...`); (3) um token AMBÍGUO
+    (`login/access/refresh/remember/identity`) CORROBORADO por um 2º indício — outro token de
+    sessão no nome OU um valor com forma de ID/JWT. Sem corroboração, o ambíguo é sinal fraco
+    e NÃO faz sessão — era o FP da classe H7 (`refresh_rate`, `early_access`, `login_layout`)."""
     lowered = name.lower()
     if any(conhecida in lowered for conhecida in _SESSAO_CONHECIDA):
         return True
-    return any(t in _SESSAO_TOKENS for t in _tokens_do_nome(name))
+    tokens = _tokens_do_nome(name)
+    if any(t in _SESSAO_TOKENS_FORTES for t in tokens):
+        return True
+    ambiguos = [t for t in tokens if t in _SESSAO_TOKENS_AMBIGUOS]
+    if not ambiguos:
+        return False
+    # 2º indício: um SEGUNDO token de sessão no nome (dois ambíguos, p.ex. `access_login`),
+    # ou o valor com forma de identificador de sessão.
+    outros_sessao = [t for t in tokens if t in _SESSAO_TOKENS and t not in ambiguos]
+    return bool(outros_sessao) or len(ambiguos) >= 2 or _valor_parece_id(value)
 
 
 def _parse_cookie(raw: str) -> _Cookie:
@@ -130,6 +170,7 @@ def _parse_cookie(raw: str) -> _Cookie:
     )
     return _Cookie(
         name=name or "(sem nome)",
+        value=value,
         secure="secure" in flags,
         http_only="httponly" in flags,
         same_site=same_site,
@@ -173,6 +214,10 @@ class CookiesChecker(Checker):
         if not cookies:
             return
 
+        # Valor por nome: o julgamento de "cookie de sessão" usa a FORMA do valor (ID/JWT)
+        # como 2º indício quando o nome só traz um token ambíguo (classe H7).
+        valor_de = {c.name: c.value for c in cookies}
+
         sem_httponly = [c.name for c in cookies if not c.http_only]
         sem_secure = [c.name for c in cookies if not c.secure]
         sem_samesite = [c.name for c in cookies if not c.same_site]
@@ -180,7 +225,9 @@ class CookiesChecker(Checker):
         if sem_httponly:
             # Três baldes, nesta ordem: CSRF (esperado), sessão/auth (grave), funcional.
             csrf_like = [n for n in sem_httponly if _is_csrf_like(n)]
-            session_like = [n for n in sem_httponly if n not in csrf_like and _is_session_like(n)]
+            session_like = [
+                n for n in sem_httponly if n not in csrf_like and _is_session_like(n, valor_de.get(n, ""))
+            ]
             if csrf_like:
                 yield Finding(
                     id="COOKIE_CSRF_LEGIVEL_POR_JS",
@@ -243,7 +290,7 @@ class CookiesChecker(Checker):
             # Severidade pelo PAPEL (classe C3): a falta de Secure num cookie de
             # sessão/auth/CSRF é MÉDIA (a sessão pode vazar num downgrade); num cookie
             # puramente funcional (analytics/preferência), não há sessão a roubar -> BAIXA.
-            sensiveis = [n for n in sem_secure if _is_session_like(n) or _is_csrf_like(n)]
+            sensiveis = [n for n in sem_secure if _is_session_like(n, valor_de.get(n, "")) or _is_csrf_like(n)]
             severidade = Severity.MEDIUM if sensiveis else Severity.LOW
             yield Finding(
                 id="COOKIE_SEM_SECURE",

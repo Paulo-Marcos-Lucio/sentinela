@@ -7,6 +7,7 @@ identificar métodos potencialmente perigosos habilitados.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from urllib.parse import urlsplit
 
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
@@ -110,7 +111,14 @@ class HttpMethodsChecker(Checker):
             return
         corpo = (probe.body_snippet or "").upper()
         ctype = (probe.header("Content-Type") or "").lower()
-        eco = "message/http" in ctype or "TRACE " in corpo or ctx.target.host.upper() in corpo
+        # Eco REAL de TRACE: ou o Content-Type é `message/http`, ou o corpo reflete a LINHA
+        # DE REQUISIÇÃO que enviamos (`TRACE <path> HTTP/...`). O disjunto antigo "host no
+        # corpo" era frouxo (classe FN-06): qualquer 200 que mencione o domínio — qualquer
+        # página com um link para si mesma — virava XST falso. Um alvo que só cita o host no
+        # HTML NÃO ecoa a requisição; um TRACE habilitado devolve a requisição literal.
+        caminho = urlsplit(ctx.target.url).path or "/"
+        linha_requisicao = f"TRACE {caminho} HTTP/".upper()
+        eco = "message/http" in ctype or linha_requisicao in corpo
         if not eco:
             return
         yield Finding(

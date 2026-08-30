@@ -8,6 +8,8 @@ cookies de remoção), o teste é property-based (Hypothesis).
 from __future__ import annotations
 
 import ipaddress
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -20,11 +22,13 @@ from sentinela.checks.exposure import ExposureChecker
 from sentinela.checks.forms import FormsChecker
 from sentinela.checks.http_methods import HttpMethodsChecker
 from sentinela.checks.security_headers import SecurityHeadersChecker
+from sentinela.checks.tls import TlsChecker
 from sentinela.core import http as http_mod
 from sentinela.core.context import ScanContext
 from sentinela.core.engine import _classificar_primaria
 from sentinela.core.http import Probe
-from sentinela.core.models import Severity
+from sentinela.core.models import Category, Finding, Severity
+from sentinela.core.scoring import compute_score
 
 
 def _probe(**kw) -> Probe:
@@ -173,7 +177,8 @@ def test_secure_ausente_severidade_por_papel() -> None:
 
 
 # ---------------------------------------------------------------- CORS (null) e métodos (FN-06)
-def test_cors_null_com_credenciais() -> None:
+def test_cors_null_com_credenciais_estatico() -> None:
+    # Servidor que ecoa `null` para QUALQUER origem (a sonda estática já o revela).
     cors_probe = _probe(
         headers={
             "Access-Control-Allow-Origin": "null",
@@ -183,6 +188,40 @@ def test_cors_null_com_credenciais() -> None:
     ctx = _ctx(_probe(), client=FakeClient(default=cors_probe))
     ids = {f.id for f in CorsChecker().run(ctx)}
     assert "CORS_NULL_COM_CREDENCIAIS" in ids
+
+
+def test_h3_cors_null_refletido_so_sob_origin_null() -> None:
+    # O vetor REAL (iframe sandbox/data:): o servidor ecoa `null` SÓ quando a requisição
+    # chega com `Origin: null` — invisível para a sonda de origem estática (classe H3).
+    def handler(method, url, headers):
+        origem = (headers or {}).get("Origin", "")
+        if origem == "null":
+            return _probe(
+                headers={
+                    "Access-Control-Allow-Origin": "null",
+                    "Access-Control-Allow-Credentials": "true",
+                }
+            )
+        return _probe(headers={})  # nenhuma reflexão para a origem arbitrária
+
+    ctx = _ctx(_probe(), client=FakeClient(handler=handler))
+    ids = {f.id for f in CorsChecker().run(ctx)}
+    assert "CORS_NULL_COM_CREDENCIAIS" in ids
+
+
+def test_h3_cors_allowlist_fixa_sem_null_nao_inventa_achado() -> None:
+    # CONTRAPROVA: allowlist fixa que NÃO ecoa nem a origem arbitrária nem `null` → nada.
+    def handler(method, url, headers):
+        return _probe(
+            headers={
+                "Access-Control-Allow-Origin": "https://parceiro.confiavel.example",
+                "Access-Control-Allow-Credentials": "true",
+            }
+        )
+
+    ctx = _ctx(_probe(), client=FakeClient(handler=handler))
+    ids = {f.id for f in CorsChecker().run(ctx)}
+    assert "CORS_NULL_COM_CREDENCIAIS" not in ids
 
 
 def test_metodos_nao_avaliados_quando_options_sem_allow() -> None:
@@ -198,11 +237,20 @@ def _forms(html: str, truncado: bool = False) -> set[str]:
     return {f.id for f in FormsChecker().run(_ctx(probe))}
 
 
-def test_senha_em_get_exige_method_explicito() -> None:
-    # form sem method (controlado por JS) NÃO deve gerar SENHA_EM_GET (C8)...
-    assert "SENHA_EM_GET" not in _forms('<form><input name="cpf"></form>')
-    # ...mas method=get EXPLÍCITO com credencial deve.
+def test_h4_senha_em_get_nativo_default_e_explicito() -> None:
+    # method=get EXPLÍCITO com credencial → sempre aponta (intenção de GET declarada).
     assert "SENHA_EM_GET" in _forms('<form method="get"><input type="password" name="p"></form>')
+    # DEFAULT do HTML (sem method) COM controle de submit nativo → GET nativo, vaza na URL
+    # (era o buraco C8/H4: a guarda exigia method explícito e cegava este caso).
+    assert "SENHA_EM_GET" in _forms(
+        '<form action="/login"><input type="password" name="p"><button>Entrar</button></form>'
+    )
+    # CONTRAPROVA 1: SPA — onsubmit intercepta (fetch/XHR), a credencial NÃO vai na URL.
+    assert "SENHA_EM_GET" not in _forms(
+        '<form onsubmit="app.login();return false"><input type="password" name="p"><button>Ok</button></form>'
+    )
+    # CONTRAPROVA 2: default-GET SEM controle de submit nativo = provável SPA, não aponta.
+    assert "SENHA_EM_GET" not in _forms('<form><input name="cpf"></form>')
 
 
 def test_meta_csrf_token_conta_como_defesa() -> None:
@@ -294,9 +342,155 @@ def test_ssrf_redirect_para_outro_host_interno_sempre_bloqueado(interno: str) ->
     assert permitido is False
 
 
-def test_c1_upgrade_http_https_mesmo_host_e_permitido() -> None:
-    alvo = "http://alvo-interno.local:8080/"
-    permitido = http_mod._redirect_do_alvo_permitido(
-        alvo, "https://alvo-interno.local:8443/", "alvo-interno.local", frozenset()
+def test_c1_upgrade_http_https_mesma_porta_ou_padrao_e_permitido() -> None:
+    perm = http_mod._redirect_do_alvo_permitido
+    # Upgrade legítimo (classe C1): 80 -> 443 (sem porta declarada) e MESMA porta explícita.
+    assert perm("http://alvo-interno.local/", "https://alvo-interno.local/", "alvo-interno.local", frozenset()) is True
+    assert (
+        perm("http://alvo-interno.local:8080/", "https://alvo-interno.local:8080/", "alvo-interno.local", frozenset())
+        is True
     )
-    assert permitido is True
+
+
+def test_h5_upgrade_para_outra_porta_nao_e_isento() -> None:
+    # Regressão H5: o upgrade http->https isentava QUALQUER porta de destino, furando a guarda.
+    # Agora só MESMA porta ou o par padrão 80->443 é isento; o resto cai na guarda anti-SSRF.
+    perm = http_mod._redirect_do_alvo_permitido
+    # http://host/ -> https://host:2376/ (Docker TLS) / :6443 (k8s): pivô de porta, NÃO isento.
+    assert perm("http://alvo-interno.local/", "https://alvo-interno.local:2376/", "alvo-interno.local", frozenset()) is False
+    assert perm("http://alvo-interno.local/", "https://alvo-interno.local:6443/", "alvo-interno.local", frozenset()) is False
+    # E o par não-padrão 8080 -> 8443 também não ganha isenção (só mesma porta ou 80->443).
+    assert (
+        perm("http://alvo-interno.local:8080/", "https://alvo-interno.local:8443/", "alvo-interno.local", frozenset())
+        is False
+    )
+
+
+# ---------------------------------------------------------------- H1: score do não-avaliado
+def _finding_scoring(fid: str, sev: Severity = Severity.INFO) -> Finding:
+    return Finding(
+        id=fid,
+        title="t",
+        category=Category.TRANSPORT,
+        severity=sev,
+        description="d",
+        recommendation="r",
+    )
+
+
+def test_h1_resposta_primaria_nao_avaliada_teta_a_nota_em_f() -> None:
+    # Classe: TODA resposta primária que suprime as checagens do alvo teta a nota em F.
+    # RESPOSTA_DE_ERRO era INFO peso 0 e NÃO tetava — um 500/404 na raiz dava 100/A com
+    # todas as checagens suprimidas (o alvo nem foi avaliado).
+    for fid in ("RESPOSTA_DE_ERRO", "ALVO_BLOQUEADO", "ALVO_INACESSIVEL"):
+        s = compute_score([_finding_scoring(fid)])
+        assert s.grade == "F", fid
+        assert s.value <= 44, fid
+
+
+def test_h1_alvo_avaliado_com_so_info_segue_a() -> None:
+    # CONTRAPROVA: um alvo REALMENTE avaliado, com apenas achados informativos, segue 100/A.
+    s = compute_score([_finding_scoring("TLS_13_AUSENTE")])
+    assert s.grade == "A" and s.value == 100
+
+
+# ---------------------------------------------------------------- H2: relógio ignora Age
+@settings(max_examples=60, deadline=None)
+@given(idade=st.integers(min_value=0, max_value=60 * 60 * 24 * 30))
+def test_h2_age_compensa_date_antigo_nao_gera_divergencia(idade: int) -> None:
+    # RFC 7234: uma resposta de cache traz Date da geração + Age. Para QUALQUER Age>=0,
+    # Date=now-Age representa deriva ZERO e NÃO pode gerar RELOGIO_LOCAL_DIVERGENTE.
+    agora = datetime.now(timezone.utc)
+    date = format_datetime(agora - timedelta(seconds=idade))
+    ctx = _ctx(_probe(headers={"Date": date, "Age": str(idade)}))
+    ids = {f.id for f in TlsChecker()._check_relogio(ctx)}
+    assert "RELOGIO_LOCAL_DIVERGENTE" not in ids
+
+
+def test_h2_hit_de_cache_sem_age_tambem_e_suprimido() -> None:
+    # Date de 8h atrás, sem Age, mas declarado Hit de CDN: o Date é da geração, não do
+    # relógio da origem — abstemo-nos (a mesma classe do falso RELOGIO_LOCAL_DIVERGENTE).
+    antigo = format_datetime(datetime.now(timezone.utc) - timedelta(hours=8))
+    ctx = _ctx(_probe(headers={"Date": antigo, "X-Cache": "Hit from cloudfront"}))
+    assert list(TlsChecker()._check_relogio(ctx)) == []
+    ctx_cf = _ctx(_probe(headers={"Date": antigo, "CF-Cache-Status": "HIT"}))
+    assert list(TlsChecker()._check_relogio(ctx_cf)) == []
+
+
+def test_h2_deriva_real_sem_cache_ainda_e_denunciada() -> None:
+    # CONTRAPROVA: Date 8h no passado, SEM Age nem sinal de cache = relógio de fato divergente.
+    antigo = format_datetime(datetime.now(timezone.utc) - timedelta(hours=8))
+    ctx = _ctx(_probe(headers={"Date": antigo}))
+    ids = {f.id for f in TlsChecker()._check_relogio(ctx)}
+    assert "RELOGIO_LOCAL_DIVERGENTE" in ids
+
+
+# ---------------------------------------------------------------- H6: CSP script-src-elem/-attr
+def test_h6_csp_com_script_src_elem_governa_script() -> None:
+    ids = _sec(
+        {"Content-Security-Policy": "script-src-elem 'self'; script-src-attr 'none'; object-src 'none'"}
+    )
+    # `script-src-elem`/`script-src-attr` governam a execução de scripts: não é "sem script-src".
+    assert "CSP_SEM_SCRIPT_SRC" not in ids
+    # E as diretivas são restritivas ('self'/'none'), então NÃO se inventa "inline permitido".
+    assert "CSP_DIRETIVA_INSEGURA" not in ids
+
+
+def test_h6_csp_sem_nenhuma_diretiva_de_script_ainda_dispara() -> None:
+    # CONTRAPROVA: CSP só com object-src/base-uri (nenhuma diretiva de script) ainda acusa.
+    ids = _sec({"Content-Security-Policy": "object-src 'none'; base-uri 'self'"})
+    assert "CSP_SEM_SCRIPT_SRC" in ids
+
+
+# ---------------------------------------------------------------- H7: cookie com token ambíguo
+def test_h7_token_ambiguo_sozinho_nao_e_sessao() -> None:
+    # Palavra genérica num nome FUNCIONAL, com valor trivial, NÃO é sessão (classe H7).
+    for cookie in (
+        "refresh_rate=30; Secure; SameSite=Lax",
+        "early_access=1; Secure; SameSite=Lax",
+        "login_layout=grid; Secure; SameSite=Lax",
+        "remember_dismissed=1; Secure; SameSite=Lax",
+    ):
+        ids = {f.id for f in _cook(cookie)}
+        assert "COOKIE_SEM_HTTPONLY" not in ids, cookie
+
+
+def test_h7_token_ambiguo_corroborado_e_sessao() -> None:
+    # CONTRAPROVA: token FORTE no nome, OU valor com forma de sessão, mantêm MEDIUM.
+    assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook("access_token=abc; Secure; SameSite=Lax")}
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJ1IjoxfQ.c2lnbmF0dXJl"
+    assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook(f"remember_me={jwt}; Secure; SameSite=Lax")}
+    # E as plataformas conhecidas seguem intactas (não regride FN-07).
+    assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook("wordpress_logged_in_ab=1; Secure; SameSite=Lax")}
+    assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook(".AspNetCore.Identity.Application=1; Secure; SameSite=Lax")}
+
+
+# ---------------------------------------------------------------- H8: TRACE eco real
+def test_h8_trace_com_eco_real_dispara() -> None:
+    # OPTIONS sem Allow → sonda TRACE. Eco REAL: Content-Type message/http + linha refletida.
+    corpo = "TRACE / HTTP/1.1\r\nHost: example.com\r\nX-Custom: 1\r\n"
+
+    def handler(method, url, headers):
+        if method == "TRACE":
+            return _probe(status_code=200, headers={"Content-Type": "message/http"}, body_snippet=corpo)
+        return _probe(status_code=200)  # OPTIONS 200 sem Allow
+
+    ctx = _ctx(_probe(), client=FakeClient(handler=handler))
+    ids = {f.id for f in HttpMethodsChecker().run(ctx)}
+    assert "HTTP_TRACE_HABILITADO" in ids
+
+
+def test_h8_trace_que_so_menciona_o_host_nao_e_xst() -> None:
+    # CONTRAPROVA (classe FN-06): 200 cujo corpo cita o domínio mas NÃO ecoa a requisição.
+    def handler(method, url, headers):
+        if method == "TRACE":
+            return _probe(
+                status_code=200,
+                headers={"Content-Type": "text/html"},
+                body_snippet="<html><a href='https://example.com/'>example.com</a></html>",
+            )
+        return _probe(status_code=200)
+
+    ctx = _ctx(_probe(), client=FakeClient(handler=handler))
+    ids = {f.id for f in HttpMethodsChecker().run(ctx)}
+    assert "HTTP_TRACE_HABILITADO" not in ids

@@ -417,20 +417,26 @@ def _redirect_do_alvo_permitido(
 
     Liberamos duas formas, ambas no MESMO host do alvo:
       * **upgrade http -> https** (o caso do mundo real: staging/VPS que responde em texto
-        aberto e manda para o TLS — antes isso virava ALVO_INACESSIVEL + nota F, classe C1);
+        aberto e manda para o TLS — antes isso virava ALVO_INACESSIVEL + nota F, classe C1),
+        mas SÓ para a MESMA porta ou o par padrão 80 -> 443 (inclui "sem porta", que resolve
+        para 80/443);
       * **mesma origem** (mesmo esquema e porta) — o redirect só troca o caminho.
 
-    NÃO liberamos um salto para OUTRA PORTA sem upgrade (ex.: http://host:8080 ->
-    http://host:9000): num host interno isso alcança um serviço DIFERENTE que o operador não
-    pediu — é exatamente o SSRF que a guarda existe para conter. Assim o upgrade legítimo passa
-    e o pivô lateral entre serviços internos continua bloqueado."""
+    NÃO liberamos um salto para OUTRA PORTA — nem sob upgrade. `http://host/` ->
+    `https://host:2376/` (Docker TLS) ou `:6443/` (k8s) alcança um serviço DIFERENTE que o
+    operador não pediu: era a regressão H5 em que o upgrade isentava QUALQUER porta e furava
+    a guarda anti-SSRF. Assim o upgrade legítimo (80->443, ou :P->:P) passa e o pivô de porta
+    — inclusive disfarçado de upgrade — continua bloqueado."""
     n = httpx.URL(next_url)
     if not _mesmo_host(n.host, alvo_host, alvo_ips):
         return False
     a = httpx.URL(alvo_url)
+    pa, pn = _porta(a), _porta(n)
     if a.scheme == "http" and n.scheme == "https":
-        return True
-    return a.scheme == n.scheme and _porta(a) == _porta(n)
+        # Upgrade só é isento na porta correspondente: mesma porta explícita, ou o par
+        # padrão 80 -> 443. Qualquer outra porta de destino é um pivô e cai na guarda.
+        return pa == pn or (pa == 80 and pn == 443)
+    return a.scheme == n.scheme and pa == pn
 
 
 def _host_is_blocked(host: str | None) -> bool:

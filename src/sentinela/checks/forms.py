@@ -46,6 +46,8 @@ class _Form:
     method: str  # "get" | "post"
     action: str
     metodo_explicito: bool = False
+    tem_onsubmit: bool = False
+    tem_controle_submit: bool = False
     campos: list[_Campo] = field(default_factory=list)
 
     @property
@@ -55,6 +57,21 @@ class _Form:
     @property
     def tem_csrf(self) -> bool:
         return any(_CSRF.search(c.name or "") for c in self.campos)
+
+    @property
+    def submete_por_url(self) -> bool:
+        """O form submete de fato pela URL (GET nativo → credencial na query string)?
+
+        GET vale tanto o explícito (`method=get`) quanto o DEFAULT do HTML (sem `method`):
+        cegar o default era o buraco C8/H4 — `<form action=/login><input type=password>`
+        com um `<button>` submete via GET e vaza a senha na URL. O que NÃO submete pela URL
+        é o form controlado por JS: um `onsubmit=` intercepta e usa fetch/XHR. E, quando o
+        método é só o default (não declarado), exigimos ainda um controle de submit nativo
+        (`<button>`/`<input type=submit>`) como prova de submissão nativa — sem ele, o form
+        é provável SPA e cobrar credencial-em-GET dele seria falso positivo."""
+        if self.method != "get" or self.tem_onsubmit:
+            return False
+        return self.metodo_explicito or self.tem_controle_submit
 
 
 # Extração de formulários por regex LIMITADA — O(n) e à prova de corpo hostil. O
@@ -69,6 +86,15 @@ _A_METHOD = re.compile(r"""\bmethod\s*=\s*["']?\s*([a-zA-Z]+)""", re.IGNORECASE)
 _A_ACTION = re.compile(r"""\baction\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_NAME = re.compile(r"""\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_TYPE = re.compile(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+# `onsubmit=` no <form> = interceptação por JS (submete via fetch/XHR, não pela URL).
+_A_ONSUBMIT = re.compile(r"\bonsubmit\s*=", re.IGNORECASE)
+# Controle de submit NATIVO no interior: <button> (default type=submit) que não seja
+# type=button/reset, ou <input type=submit|image>. É a prova de que o form submete de
+# forma nativa (e não é um SPA controlado por JS).
+_BOTAO_SUBMIT_RE = re.compile(
+    rf"""<button\b(?![^>]{{0,{_ATTR_SCAN}}}?\btype\s*=\s*["']?(?:button|reset)\b)""",
+    re.IGNORECASE,
+)
 
 
 def _attr(regex: re.Pattern[str], texto: str) -> str:
@@ -106,7 +132,18 @@ def _coletar_forms(html: str) -> list[_Form]:
             _Campo(name=_attr(_A_NAME, t), type=(_attr(_A_TYPE, t) or "text").strip().lower())
             for t in _CAMPO_RE.findall(interior)
         ]
-        forms.append(_Form(method=metodo, action=action, metodo_explicito=bool(metodo_raw), campos=campos))
+        tem_input_submit = any(c.type in ("submit", "image") for c in campos)
+        tem_controle_submit = tem_input_submit or bool(_BOTAO_SUBMIT_RE.search(interior))
+        forms.append(
+            _Form(
+                method=metodo,
+                action=action,
+                metodo_explicito=bool(metodo_raw),
+                tem_onsubmit=bool(_A_ONSUBMIT.search(cabecalho)),
+                tem_controle_submit=tem_controle_submit,
+                campos=campos,
+            )
+        )
     return forms
 
 
@@ -143,10 +180,12 @@ class FormsChecker(Checker):
             re.search(r'<meta\b[^>]*\bname\s*=\s*[\'"]?csrf-(?:token|param)', html, re.IGNORECASE)
         )
         for f in _coletar_forms(html):
-            # SENHA_EM_GET só quando o method=get é EXPLÍCITO: um <form> sem method/action
-            # controlado por JS (fetch/XHR) NÃO submete pela URL — cobrar credencial-em-GET
-            # dele é falso positivo (classe C8). O default "get" do HTML não basta aqui.
-            if f.method == "get" and f.metodo_explicito and f.tem_senha:
+            # SENHA_EM_GET quando a credencial vai DE FATO pela URL (GET nativo). GET conta
+            # tanto o explícito quanto o DEFAULT do HTML; o que isenta é a submissão por JS
+            # (`onsubmit=` → fetch/XHR não põe nada na URL). Cegar o default era o buraco H4:
+            # `<form action=/login><input type=password><button>` vaza a senha na query. Ver
+            # `_Form.submete_por_url` para a regra completa (classe C8/H4).
+            if f.submete_por_url and f.tem_senha:
                 senha_get = True
             # Form com credencial cujo `action` aponta para http:// (conteúdo misto). O caso
             # "página inteira em HTTP com campo de senha" já é coberto por SENHA_SEM_HTTPS

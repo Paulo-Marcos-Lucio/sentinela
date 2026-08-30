@@ -1,9 +1,14 @@
 """Detecção de configurações inseguras de CORS.
 
-Envia UMA requisição extra com um cabeçalho ``Origin`` forjado e observa como o
+Envia requisições extras com cabeçalhos ``Origin`` forjados e observa como o
 servidor responde em ``Access-Control-Allow-Origin`` (ACAO) e
-``Access-Control-Allow-Credentials`` (ACAC). É uma sonda de baixo impacto (uma
-requisição GET), considerada não-intrusiva.
+``Access-Control-Allow-Credentials`` (ACAC). São sondas de baixo impacto (GETs),
+consideradas não-intrusivas.
+
+Duas origens de teste, porque são vetores DIFERENTES: uma origem arbitrária revela
+reflexão cega; ``Origin: null`` (contexto de iframe com sandbox, documento
+``data:``/``file:``, alguns redirects) revela o servidor que ecoa ``null`` SÓ quando
+a requisição chega com essa origem — invisível para uma única sonda estática.
 """
 
 from __future__ import annotations
@@ -36,14 +41,27 @@ class CorsChecker(Checker):
 
         acao = probe.header("Access-Control-Allow-Origin")
         acac = (probe.header("Access-Control-Allow-Credentials") or "").lower() == "true"
-        if acao is None:
-            return  # sem CORS habilitado para esta origem — nada a relatar
 
-        reflete = acao.strip() == _PROBE_ORIGIN
-        curinga = acao.strip() == "*"
-        nulo = acao.strip().lower() == "null"
+        reflete = acao is not None and acao.strip() == _PROBE_ORIGIN
+        curinga = acao is not None and acao.strip() == "*"
+        nulo_estatico = acao is not None and acao.strip().lower() == "null"
 
-        if nulo and acac:
+        # Sonda dedicada a `Origin: null`. Só a tratamos como achado PRÓPRIO quando o
+        # servidor NÃO reflete a origem arbitrária com credenciais — se refletisse, o caso
+        # já é o geral (CORS_REFLEXAO_COM_CREDENCIAIS) e `null` é só um subconjunto dele.
+        # Assim pegamos o alvo que ecoa `null` exclusivamente sob `Origin: null` (o vetor
+        # real que uma sonda estática é cega para ver).
+        null_probe = ctx.client.get(ctx.target.url, headers={"Origin": "null"})
+        null_ecoa_null = null_probe.ok and (
+            (null_probe.header("Access-Control-Allow-Origin") or "").strip().lower() == "null"
+        )
+        null_acac = (
+            null_probe.ok
+            and (null_probe.header("Access-Control-Allow-Credentials") or "").lower() == "true"
+        )
+        null_especial = null_ecoa_null and null_acac and not (reflete and acac)
+
+        if (nulo_estatico and acac) or null_especial:
             yield Finding(
                 id="CORS_NULL_COM_CREDENCIAIS",
                 title="CORS aceita a origem `null` com credenciais",
@@ -53,7 +71,10 @@ class CorsChecker(Checker):
                     "O servidor respondeu `Access-Control-Allow-Origin: null` com "
                     "`Access-Control-Allow-Credentials: true`."
                 ),
-                evidence="Access-Control-Allow-Origin: null; credentials=true",
+                evidence=(
+                    f"Origin: {'null' if null_especial else _PROBE_ORIGIN} → "
+                    "Access-Control-Allow-Origin: null; credentials=true"
+                ),
                 impact=(
                     "A origem `null` é atribuída a contextos como iframes com sandbox, "
                     "documentos `data:`/`file:` e alguns redirecionamentos — todos controláveis "

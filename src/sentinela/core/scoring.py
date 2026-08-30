@@ -49,6 +49,14 @@ def _grade_for(value: int) -> str:
 # site bem operado. Ver auditoria de campo 2026-07-22.
 _CERT_QUEBRADO = frozenset({"CERT_EXPIRADO", "CERT_NAO_CONFIAVEL", "CERT_HOSTNAME_INVALIDO"})
 
+# Situações em que a resposta primária NÃO é o alvo avaliado — o motor suprimiu as
+# checagens de documento/cabeçalho (ver `_classificar_primaria`/`_Situacao`). A CLASSE é
+# uma só: "não conseguimos avaliar o alvo". Todas TETAM a nota em F, pela mesma razão que
+# `ALVO_INACESSIVEL` já tetava — uma penalidade linear (peso 0 do INFO) deixaria um alvo
+# NÃO avaliado (500/404/página de WAF) pontuar 100/A, acima de um site de fato medido.
+# Invariante: toda resposta primária que suprime as checagens do alvo teta a nota em F.
+_NAO_AVALIADO = frozenset({"ALVO_INACESSIVEL", "ALVO_BLOQUEADO", "RESPOSTA_DE_ERRO"})
+
 # Frase que acompanha o teto de CONCEITO — sem ela, "80/100 · conceito D" parece bug.
 _AVISO_TETO_CONCEITO = (
     " O conceito está limitado por gravidade: a nota numérica mede higiene, o conceito "
@@ -90,11 +98,15 @@ def compute_score(findings: list[Finding]) -> Score:
     ids = {f.id for f in findings}
     inacessivel = "ALVO_INACESSIVEL" in ids
     bloqueado = "ALVO_BLOQUEADO" in ids
+    resposta_erro = "RESPOSTA_DE_ERRO" in ids
+    nao_avaliado = bool(ids & _NAO_AVALIADO)
     cert_quebrado = bool(ids & _CERT_QUEBRADO)
 
-    if inacessivel or bloqueado or cert_quebrado:
-        # Não avaliamos o alvo (inacessível, ou uma página de bloqueio de WAF/CDN respondeu
-        # no lugar dele, ou o certificado quebra a confiança): a nota não pode ser boa.
+    if nao_avaliado or cert_quebrado:
+        # Não avaliamos o alvo (inacessível, uma página de bloqueio de WAF/CDN ou um erro
+        # HTTP respondeu no lugar dele, ou o certificado quebra a confiança): a nota não
+        # pode ser boa. Um alvo que responde 500/404 na raiz teve TODAS as checagens de
+        # documento suprimidas — pontuá-lo 100/A seria premiar o que não foi medido.
         value = min(value, 40)  # coerente com a faixa F (<45)
         grade = "F"
     else:
@@ -115,6 +127,14 @@ def compute_score(findings: list[Finding]) -> Score:
             "a superfície real do alvo não pôde ser avaliada. A nota reflete a impossibilidade "
             "de verificação, não um veredito de segurança — reexecute a partir de um "
             "IP/User-Agent autorizado."
+        )
+        return Score(value=value, grade=grade, summary=summary)
+    if resposta_erro:
+        summary = (
+            "A URL do alvo respondeu com um erro HTTP: a página de erro não é a aplicação, e "
+            "as checagens de documento foram suprimidas para não laudar cabeçalhos que são da "
+            "página de erro. A nota reflete a impossibilidade de avaliar a superfície real, não "
+            "um veredito de segurança — confirme a URL correta do alvo e reexecute."
         )
         return Score(value=value, grade=grade, summary=summary)
     if cert_quebrado:

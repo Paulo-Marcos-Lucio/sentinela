@@ -13,7 +13,7 @@ import socket
 import ssl
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 from cryptography import x509
@@ -103,7 +103,17 @@ class TlsChecker(Checker):
         remoto = _data_do_servidor(ctx.primary.header("Date"))
         if remoto is None:
             return
-        deriva = abs((datetime.now(timezone.utc) - remoto).total_seconds())
+        # Uma resposta servida de CACHE carrega o `Date` de quando foi GERADA na origem, não
+        # "agora" — e um `Date` antigo compensado por `Age` (CDN) NÃO é deriva de relógio. Sem
+        # tratar isso, todo Hit de borda (Date de horas atrás, Age igual) virava um falso
+        # RELOGIO_LOCAL_DIVERGENTE. Duas defesas para a MESMA classe:
+        #   (1) RFC 7234: o relógio da origem ≈ Date + Age. Corrigimos antes de comparar.
+        #   (2) se a resposta se declara um HIT de cache (X-Cache/CF-Cache-Status), o `Date`
+        #       não é fonte confiável de relógio — abstemo-nos em vez de acusar.
+        if _resposta_de_cache_hit(ctx.primary):
+            return
+        origem = remoto + timedelta(seconds=_idade_da_resposta(ctx.primary.header("Age")))
+        deriva = abs((datetime.now(timezone.utc) - origem).total_seconds())
         if deriva < _DERIVA_MAXIMA_SEGUNDOS:
             return
         yield Finding(
@@ -359,6 +369,30 @@ def _data_do_servidor(valor: str | None) -> datetime | None:
         return parsedate_to_datetime(valor).astimezone(timezone.utc)
     except (TypeError, ValueError):
         return None
+
+
+def _idade_da_resposta(valor: str | None) -> float:
+    """`Age` (RFC 7234) em segundos: quanto tempo a resposta ficou em cache. 0 se
+    ausente/inválido/negativo — nunca move o `Date` para trás."""
+    if not valor:
+        return 0.0
+    try:
+        idade = int(valor.strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return float(idade) if idade > 0 else 0.0
+
+
+def _resposta_de_cache_hit(probe: object) -> bool:
+    """A resposta se declara servida de um cache de borda? Nesse caso o `Date` é o da
+    geração na origem (possivelmente sem `Age` para corrigir), e não uma leitura do
+    relógio da origem — não serve para acusar divergência de relógio."""
+    header = getattr(probe, "header", None)
+    if not callable(header):
+        return False
+    xcache = (header("X-Cache") or "").lower()
+    cf = (header("CF-Cache-Status") or "").upper()
+    return "hit" in xcache or cf == "HIT"
 
 
 def _contexto_de_confianca() -> ssl.SSLContext:
