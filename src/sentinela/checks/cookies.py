@@ -290,7 +290,9 @@ class CookiesChecker(Checker):
             # Severidade pelo PAPEL (classe C3): a falta de Secure num cookie de
             # sessão/auth/CSRF é MÉDIA (a sessão pode vazar num downgrade); num cookie
             # puramente funcional (analytics/preferência), não há sessão a roubar -> BAIXA.
-            sensiveis = [n for n in sem_secure if _is_session_like(n, valor_de.get(n, "")) or _is_csrf_like(n)]
+            sensiveis = [
+                n for n in sem_secure if _is_session_like(n, valor_de.get(n, "")) or _is_csrf_like(n)
+            ]
             severidade = Severity.MEDIUM if sensiveis else Severity.LOW
             yield Finding(
                 id="COOKIE_SEM_SECURE",

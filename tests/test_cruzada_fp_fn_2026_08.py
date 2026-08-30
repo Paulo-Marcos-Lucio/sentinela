@@ -345,9 +345,17 @@ def test_ssrf_redirect_para_outro_host_interno_sempre_bloqueado(interno: str) ->
 def test_c1_upgrade_http_https_mesma_porta_ou_padrao_e_permitido() -> None:
     perm = http_mod._redirect_do_alvo_permitido
     # Upgrade legítimo (classe C1): 80 -> 443 (sem porta declarada) e MESMA porta explícita.
-    assert perm("http://alvo-interno.local/", "https://alvo-interno.local/", "alvo-interno.local", frozenset()) is True
     assert (
-        perm("http://alvo-interno.local:8080/", "https://alvo-interno.local:8080/", "alvo-interno.local", frozenset())
+        perm("http://alvo-interno.local/", "https://alvo-interno.local/", "alvo-interno.local", frozenset())
+        is True
+    )
+    assert (
+        perm(
+            "http://alvo-interno.local:8080/",
+            "https://alvo-interno.local:8080/",
+            "alvo-interno.local",
+            frozenset(),
+        )
         is True
     )
 
@@ -357,11 +365,32 @@ def test_h5_upgrade_para_outra_porta_nao_e_isento() -> None:
     # Agora só MESMA porta ou o par padrão 80->443 é isento; o resto cai na guarda anti-SSRF.
     perm = http_mod._redirect_do_alvo_permitido
     # http://host/ -> https://host:2376/ (Docker TLS) / :6443 (k8s): pivô de porta, NÃO isento.
-    assert perm("http://alvo-interno.local/", "https://alvo-interno.local:2376/", "alvo-interno.local", frozenset()) is False
-    assert perm("http://alvo-interno.local/", "https://alvo-interno.local:6443/", "alvo-interno.local", frozenset()) is False
+    assert (
+        perm(
+            "http://alvo-interno.local/",
+            "https://alvo-interno.local:2376/",
+            "alvo-interno.local",
+            frozenset(),
+        )
+        is False
+    )
+    assert (
+        perm(
+            "http://alvo-interno.local/",
+            "https://alvo-interno.local:6443/",
+            "alvo-interno.local",
+            frozenset(),
+        )
+        is False
+    )
     # E o par não-padrão 8080 -> 8443 também não ganha isenção (só mesma porta ou 80->443).
     assert (
-        perm("http://alvo-interno.local:8080/", "https://alvo-interno.local:8443/", "alvo-interno.local", frozenset())
+        perm(
+            "http://alvo-interno.local:8080/",
+            "https://alvo-interno.local:8443/",
+            "alvo-interno.local",
+            frozenset(),
+        )
         is False
     )
 
@@ -462,7 +491,9 @@ def test_h7_token_ambiguo_corroborado_e_sessao() -> None:
     assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook(f"remember_me={jwt}; Secure; SameSite=Lax")}
     # E as plataformas conhecidas seguem intactas (não regride FN-07).
     assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook("wordpress_logged_in_ab=1; Secure; SameSite=Lax")}
-    assert "COOKIE_SEM_HTTPONLY" in {f.id for f in _cook(".AspNetCore.Identity.Application=1; Secure; SameSite=Lax")}
+    assert "COOKIE_SEM_HTTPONLY" in {
+        f.id for f in _cook(".AspNetCore.Identity.Application=1; Secure; SameSite=Lax")
+    }
 
 
 # ---------------------------------------------------------------- H8: TRACE eco real
