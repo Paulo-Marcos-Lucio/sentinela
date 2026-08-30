@@ -7,6 +7,13 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **`exploitability_proven`/`not_proven` em cada achado do `-f json`.** Distingue um
+  achado comprovado por ação real contra o alvo (hoje, só `ExposureChecker` em modo
+  `--autorizado`) de um indício observado passivamente — a maioria do catálogo. Um
+  achado com `exploitability_proven: true` fora do modo ativo é recusado com
+  `ValueError` por `ScanResult.add`/`extend`, não só pelo gating de registro.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança

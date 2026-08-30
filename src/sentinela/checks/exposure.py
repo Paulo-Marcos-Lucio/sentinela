@@ -30,6 +30,16 @@ _ENV_RE = re.compile(r"^(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=", re.MULT
 
 _GIT_CONFIG_RE = re.compile(r"\[core\]|repositoryformatversion|\[remote \"", re.IGNORECASE)
 
+# `not_proven` dos caminhos confirmados: o GET real prova que o caminho está público e
+# devolve o conteúdo esperado — não prova nada além disso. Sem esta lista, o campo
+# `exploitability_proven=True` sozinho leria como "achado 100% comprovado", quando na
+# verdade validade de credencial e alcance do vazamento continuam por confirmar.
+_NAO_PROVADO_EXPOSICAO_CONFIRMADA: tuple[str, ...] = (
+    "que o conteúdo exposto contém segredo válido e em uso — só foi confirmado que o "
+    "caminho responde publicamente com o conteúdo esperado",
+    "qualquer ação além da leitura do próprio caminho (nenhum segredo encontrado foi usado)",
+)
+
 
 def _is_git_head(body: str) -> bool:
     return bool(_GIT_HEAD_RE.match(body.strip()))
@@ -189,6 +199,10 @@ class ExposureChecker(Checker):
                     impact=spec.impact,
                     recommendation=spec.recommendation,
                     references=spec.references,
+                    # A assinatura de conteúdo já confirmou o artefato de verdade (não um
+                    # 200 genérico) — isto é ação real contra o alvo, não inferência.
+                    exploitability_proven=True,
+                    not_proven=_NAO_PROVADO_EXPOSICAO_CONFIRMADA,
                 )
 
         yield from self._check_security_txt(ctx)
