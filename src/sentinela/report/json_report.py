@@ -72,6 +72,12 @@ def _finding_dict(finding: Finding) -> dict[str, object]:
         "severity": finding.severity.name.lower(),
         "severity_label": finding.severity.label,
         "severity_rank": int(finding.severity),
+        # O que o achado AFIRMA (não confundir com severidade — ver FindingType) e o
+        # quanto a checagem confia na própria afirmação. Default seguro quando a checagem
+        # não declara: "observation"/"low", nunca "confirmed_vulnerability"/"high" por
+        # omissão (core.models.Finding documenta o porquê).
+        "type": finding.type.value,
+        "confidence": finding.confidence.value,
         "subject": finding.subject,
         "owasp": tag.owasp if tag else None,
         "cwe": tag.cwe if tag else None,
