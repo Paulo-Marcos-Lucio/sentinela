@@ -1,0 +1,324 @@
+# finding_id -> classificação OWASP Top 10:2025 / CWE — espelho declarativo de
+# `knowledge/mapping._TAGS`.
+#
+# `owasp: null` e `cwe: null` são classificação deliberada (achado informativo,
+# meta-achado ou constatação de limite de escopo), não campo esquecido — o
+# próprio `_TAGS` já os declara assim.
+#
+# tests/test_taxonomy.py falha se qualquer entrada aqui divergir do que
+# `knowledge/mapping.py` de fato emite: novo achado sem entrada aqui, entrada
+# órfã sem achado correspondente, ou classificação (owasp/cwe/cwe_name)
+# diferente do valor em `_TAGS`.
+
+DNS_NAO_AVALIADO:
+  owasp: null
+  cwe: null
+  cwe_name: null
+TRANSPORTE_NAO_AVALIADO:
+  owasp: null
+  cwe: null
+  cwe_name: null
+CSP_NAO_AVALIADA:
+  owasp: null
+  cwe: null
+  cwe_name: null
+TLS_LEGADO_NAO_AVALIADO:
+  owasp: null
+  cwe: null
+  cwe_name: null
+DESCOBERTA_NAO_AVALIADA:
+  owasp: null
+  cwe: null
+  cwe_name: null
+RELOGIO_LOCAL_DIVERGENTE:
+  owasp: null
+  cwe: null
+  cwe_name: null
+XCTO_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+REFERRER_POLICY_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-200
+  cwe_name: Exposure of Sensitive Information
+PERMISSIONS_POLICY_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+COOP_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_DIRETIVA_INSEGURA:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_ESTILO_INLINE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_APENAS_REPORT_ONLY:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_WILDCARD_PERMISSIVO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_SEM_OBJECT_SRC:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CSP_SEM_BASE_URI:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CLICKJACKING_SEM_PROTECAO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-1021
+  cwe_name: Improper Restriction of Rendered UI Layers
+XXSS_PROTECTION_LEGADO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+POLITICA_VIA_META:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: null
+  cwe_name: null
+HSTS_AUSENTE:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+HSTS_FRACO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+HSTS_SEM_SUBDOMINIOS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+SEM_HTTPS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+SEM_REDIRECT_HTTPS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+COOKIE_SEM_HTTPONLY:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-1004
+  cwe_name: Sensitive Cookie Without 'HttpOnly' Flag
+COOKIE_SEM_HTTPONLY_FUNCIONAL:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-1004
+  cwe_name: Sensitive Cookie Without 'HttpOnly' Flag
+COOKIE_CSRF_LEGIVEL_POR_JS:
+  owasp: null
+  cwe: null
+  cwe_name: null
+COOKIE_SEM_SECURE:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-614
+  cwe_name: Sensitive Cookie Without 'Secure' Attribute
+COOKIE_SEM_SAMESITE:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-352
+  cwe_name: Cross-Site Request Forgery (CSRF)
+COOKIE_SAMESITE_NONE_INSEGURO:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-1275
+  cwe_name: Sensitive Cookie with Improper SameSite Attribute
+COOKIE_PREFIXO_INVALIDO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+CONTEUDO_MISTO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+SRI_AUSENTE:
+  owasp: A03:2025 Software Supply Chain Failures
+  cwe: CWE-353
+  cwe_name: Missing Support for Integrity Check
+FORM_ACTION_INSEGURA:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+SENHA_SEM_HTTPS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+CORS_REFLEXAO_COM_CREDENCIAIS:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-942
+  cwe_name: Permissive Cross-domain Policy
+CORS_CURINGA_COM_CREDENCIAIS:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-942
+  cwe_name: Permissive Cross-domain Policy
+CORS_REFLEXAO_ORIGEM:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-942
+  cwe_name: Permissive Cross-domain Policy
+HTTP_TRACE_HABILITADO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-693
+  cwe_name: Protection Mechanism Failure
+HTTP_METODOS_PERIGOSOS:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-650
+  cwe_name: Trusting HTTP Permission Methods on the Server Side
+VERSAO_STACK_EXPOSTA:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-200
+  cwe_name: Exposure of Sensitive Information
+LISTAGEM_DIRETORIO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-548
+  cwe_name: Exposure of Information Through Directory Listing
+GIT_EXPOSTO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-527
+  cwe_name: Exposure of Version-Control Repository to Web
+DOTENV_EXPOSTO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-538
+  cwe_name: Insertion of Sensitive Information into Externally-Accessible File
+SVN_EXPOSTO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-527
+  cwe_name: Exposure of Version-Control Repository to Web
+APACHE_STATUS_EXPOSTO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-200
+  cwe_name: Exposure of Sensitive Information
+PHPINFO_EXPOSTO:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-200
+  cwe_name: Exposure of Sensitive Information
+CERT_EXPIRADO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-298
+  cwe_name: Improper Validation of Certificate Expiration
+CERT_EXPIRANDO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-298
+  cwe_name: Improper Validation of Certificate Expiration
+CERT_HOSTNAME_INVALIDO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-295
+  cwe_name: Improper Certificate Validation
+CERT_CHAVE_FRACA:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-326
+  cwe_name: Inadequate Encryption Strength
+CERT_ASSINATURA_FRACA:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-327
+  cwe_name: Use of a Broken or Risky Cryptographic Algorithm
+CERT_NAO_CONFIAVEL:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-295
+  cwe_name: Improper Certificate Validation
+TLS_PROTOCOLO_LEGADO:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-327
+  cwe_name: Use of a Broken or Risky Cryptographic Algorithm
+TLS_SEM_PFS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-326
+  cwe_name: Inadequate Encryption Strength
+TLS_13_AUSENTE:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: null
+  cwe_name: null
+DNS_HOSPEDAGEM_GERENCIADA:
+  owasp: null
+  cwe: null
+  cwe_name: null
+SPF_AUSENTE:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-290
+  cwe_name: Authentication Bypass by Spoofing
+SPF_PERMISSIVO:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-290
+  cwe_name: Authentication Bypass by Spoofing
+DMARC_AUSENTE:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-290
+  cwe_name: Authentication Bypass by Spoofing
+DMARC_SEM_ENFORCEMENT:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-290
+  cwe_name: Authentication Bypass by Spoofing
+CAA_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: null
+  cwe_name: null
+DNSSEC_AUSENTE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-345
+  cwe_name: Insufficient Verification of Data Authenticity
+MTA_STS_AUSENTE:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+TLS_RPT_AUSENTE:
+  owasp: null
+  cwe: null
+  cwe_name: null
+ROBOTS_CAMINHOS_SENSIVEIS:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-200
+  cwe_name: Exposure of Sensitive Information
+SUPERFICIE_SUBDOMINIOS:
+  owasp: null
+  cwe: null
+  cwe_name: null
+SUBDOMAIN_TAKEOVER:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-284
+  cwe_name: Improper Access Control
+SUBDOMAIN_TAKEOVER_POSSIVEL:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-284
+  cwe_name: Improper Access Control
+CACHE_SENSIVEL_SEM_NOSTORE:
+  owasp: A02:2025 Security Misconfiguration
+  cwe: CWE-525
+  cwe_name: Use of Web Browser Cache Containing Sensitive Information
+ALVO_INACESSIVEL:
+  owasp: null
+  cwe: null
+  cwe_name: null
+SECURITY_TXT_AUSENTE:
+  owasp: null
+  cwe: null
+  cwe_name: null
+SENHA_EM_GET:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-598
+  cwe_name: Use of GET Request Method With Sensitive Query Strings
+FORMULARIO_CREDENCIAL_SEM_HTTPS:
+  owasp: A04:2025 Cryptographic Failures
+  cwe: CWE-319
+  cwe_name: Cleartext Transmission of Sensitive Information
+CSRF_TOKEN_AUSENTE:
+  owasp: A01:2025 Broken Access Control
+  cwe: CWE-352
+  cwe_name: Cross-Site Request Forgery (CSRF)
+REFLEXAO_DE_PARAMETRO:
+  owasp: A05:2025 Injection
+  cwe: CWE-79
+  cwe_name: Improper Neutralization of Input During Web Page Generation (XSS)
+DADO_SENSIVEL_NA_URL:
+  owasp: A07:2025 Authentication Failures
+  cwe: CWE-598
+  cwe_name: Use of GET Request Method With Sensitive Query Strings
