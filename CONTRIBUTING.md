@@ -45,6 +45,16 @@ A arquitetura torna isso simples e isolado:
 Usamos [Conventional Commits](https://www.conventionalcommits.org/):
 `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`.
 
+## Definição de pronto para correção de defeito
+
+Uma correção de defeito só está pronta quando ataca a **classe** do problema,
+não o exemplo isolado que apareceu no relatório: um teste que falhava contra
+o código anterior à correção, mais um invariante — property-based com
+Hypothesis quando a classe for uma família de entradas — que impeça a classe
+inteira de voltar. Ver [`docs/definicao-de-pronto.md`](docs/definicao-de-pronto.md),
+com exemplos reais deste repositório. Esse critério vale para as cinco
+ferramentas da suíte, não só para a Sentinela.
+
 ## Princípios
 
 - **Não-intrusivo por padrão.** Novas checagens ativas entram apenas sob `--autorizado`.
