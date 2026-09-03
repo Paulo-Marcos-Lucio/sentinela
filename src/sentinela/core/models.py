@@ -7,7 +7,7 @@ relatório final é lido pelo cliente da consultoria.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum, IntEnum
 
@@ -108,6 +108,31 @@ class Category(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class Review:
+    """Registro de revisão humana de um achado (ver `audit/EVIDENCE_MODEL.md` §3.2).
+
+    O default — ``reviewed=False`` e todo o resto ``None`` — é o estado de TODO
+    achado recém-saído da varredura automática: nenhum humano olhou ainda. Existe
+    porque, antes deste campo, o trabalho humano que o cliente paga — a revisão do
+    consultor antes de fechar o laudo — não aparecia em lugar nenhum do entregável;
+    um achado "olhado e confirmado por um especialista" e um achado cru da
+    ferramenta saíam do relatório exatamente iguais.
+
+    `disposition` e `note` ficam de fora do preenchimento automático por CLI desta
+    rodada: a Sentinela ainda não tem um fluxo de revisão achado-a-achado (só o
+    carimbo de "quem revisou o laudo"), e inventar valores aqui seria a mesma
+    superclassificação por omissão que `type`/`confidence` (EV-01) existem para
+    evitar. Ficam como texto livre, preenchidos por fora (edição do JSON) até
+    existir esse fluxo.
+    """
+
+    reviewed: bool = False
+    reviewer: str | None = None
+    disposition: str | None = None
+    note: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Finding:
     """Um achado individual da varredura.
 
@@ -132,6 +157,9 @@ class Finding:
     distintos declaravam o mesmo ``partialFingerprints`` e o GitHub os fundia num alerta
     só — o cliente corrigia um e achava que tinha acabado.
     """
+    review: Review = field(default_factory=Review)
+    """Ver `Review`. Preenchido pelo motor após a varredura (`ScanResult.mark_reviewed`),
+    nunca pela própria checagem — nenhuma checagem sabe se um humano olhou o resultado."""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -204,6 +232,29 @@ class ScanResult:
 
     def extend(self, findings: list[Finding]) -> None:
         self.findings.extend(findings)
+
+    def mark_reviewed(self, reviewer: str) -> None:
+        """Carimba TODOS os achados como revisados por ``reviewer``.
+
+        `Finding` é imutável (``frozen=True``) — cada achado é substituído por uma
+        cópia com `review` atualizado, via `dataclasses.replace`. É o único ponto do
+        motor que escreve em `Finding.review`: nenhuma checagem sabe se um humano
+        olhou o resultado, então nenhuma pode preencher esse campo sozinha.
+
+        Não sobrescreve `disposition`/`note` de um achado já revisado — hoje nenhuma
+        checagem os preenche, mas um `mark_reviewed` chamado duas vezes (ex.: CLI
+        chamado outra vez sobre o mesmo `ScanResult`) não deve apagar anotação
+        alguma que já exista.
+        """
+        if not reviewer:
+            raise ValueError("reviewer não pode ser vazio")
+        self.findings = [
+            replace(
+                f,
+                review=replace(f.review, reviewed=True, reviewer=reviewer),
+            )
+            for f in self.findings
+        ]
 
     def sorted_findings(self) -> list[Finding]:
         """Achados ordenados por severidade (desc.), depois categoria e título."""

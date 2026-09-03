@@ -81,4 +81,10 @@ def _finding_dict(finding: Finding) -> dict[str, object]:
         "impact": finding.impact,
         "recommendation": finding.recommendation,
         "references": list(finding.references),
+        "review": {
+            "reviewed": finding.review.reviewed,
+            "reviewer": finding.review.reviewer,
+            "disposition": finding.review.disposition,
+            "note": finding.review.note,
+        },
     }

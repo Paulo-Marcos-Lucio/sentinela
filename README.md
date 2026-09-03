@@ -159,6 +159,7 @@ Principais opções do `scan`:
 | `--perfil` | `completo` (padrão) roda tudo; `rapido` pula TLS, DNS/e-mail e robots.txt (triagem ágil). |
 | `--descobrir` | Enumera subdomínios via Certificate Transparency e checa subdomain takeover. Passivo, porém mais lento. |
 | `--sem-verificacao-tls` | **INSEGURO**: desabilita a validação de certificado nas conexões (sujeito a MITM). Os achados de TLS continuam sendo reportados. |
+| `--revisor` / `--reviewer` | Nome de quem revisou o laudo. Carimba `review.reviewed=true`/`review.reviewer` em todo achado do JSON. Sem esta opção, `review.reviewed` fica em `false` — a varredura automática não afirma revisão nenhuma. |
 
 **Códigos de saída:** `0` varredura concluída · `1` achado no nível de `--falhar-em` ou acima · `2` erro de uso (alvo inválido, ID de checagem inexistente, nível desconhecido).
 
