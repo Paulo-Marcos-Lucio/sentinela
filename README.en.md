@@ -160,6 +160,7 @@ Main `scan` options:
 | `--perfil` | `completo` (default) runs everything; `rapido` skips TLS, DNS/email, and robots.txt (fast triage). |
 | `--descobrir` | Enumerates subdomains via Certificate Transparency and checks for subdomain takeover. Passive, but slower. |
 | `--sem-verificacao-tls` | **INSECURE**: disables certificate validation on connections (subject to MITM). TLS findings are still reported. |
+| `--revisor` / `--reviewer` | Name of whoever reviewed the report. Stamps `review.reviewed=true`/`review.reviewer` on every finding in the JSON. Without it, `review.reviewed` stays `false` — the automated scan makes no claim of human review. |
 
 **Exit codes:** `0` scan completed · `1` finding at the `--falhar-em` level or above · `2` usage error (invalid target, nonexistent check ID, unknown level).
 
