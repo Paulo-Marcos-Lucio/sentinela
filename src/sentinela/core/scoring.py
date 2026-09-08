@@ -10,8 +10,12 @@ substituir uma análise de risco completa.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from sentinela.core.models import Finding, Severity
+
+if TYPE_CHECKING:
+    from sentinela.core.coverage import Coverage
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +85,7 @@ def _teto_de_conceito(grade: str, findings: list[Finding]) -> str:
     return grade
 
 
-def compute_score(findings: list[Finding], coverage: object | None = None) -> Score:
+def compute_score(findings: list[Finding], coverage: Coverage | None = None) -> Score:
     """Calcula a nota subtraindo de 100 os pesos de cada achado.
 
     Achados informativos não penalizam. O piso é 0. O cálculo é intencionalmente
@@ -124,7 +128,7 @@ def compute_score(findings: list[Finding], coverage: object | None = None) -> Sc
 
     # Teto de cobertura: varredura parcial não certifica A. Aplicado só quando a nota
     # não está já tetada em F por outro motivo (não faz sentido "elevar" F para B).
-    cobertura_parcial = bool(coverage is not None and getattr(coverage, "parcial", False))
+    cobertura_parcial = coverage is not None and coverage.parcial
     if cobertura_parcial and grade == "A":
         grade = "B"
 
@@ -163,7 +167,7 @@ def compute_score(findings: list[Finding], coverage: object | None = None) -> Sc
     if not actionable:
         # A frase de "higiene sólida" só vale se a cobertura FOI plena — do contrário
         # afirma sobre o que não se olhou. Com cobertura parcial, o resumo é honesto.
-        if cobertura_parcial:
+        if coverage is not None and coverage.parcial:  # inline: estreita o tipo p/ o mypy
             summary = (
                 "Nenhum problema acionável NA PARTE AVALIADA — mas a varredura foi parcial "
                 f"({len(coverage.executadas)} de {coverage.base_total} checagens). "
@@ -195,7 +199,7 @@ def compute_score(findings: list[Finding], coverage: object | None = None) -> Sc
         summary += _AVISO_TETO_CONCEITO
     # Quando há achado acionável E cobertura parcial, a lacuna precisa aparecer também
     # (o ramo "sem acionável" acima já a nomeia por conta própria).
-    if cobertura_parcial and actionable:
+    if actionable and coverage is not None and coverage.parcial:  # inline: estreita p/ o mypy
         summary += (
             f" Cobertura parcial: {len(coverage.executadas)} de {coverage.base_total} "
             f"checagens; não avaliado: {coverage.resumo_omissoes()}."

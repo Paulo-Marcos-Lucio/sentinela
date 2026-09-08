@@ -10,6 +10,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum, IntEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentinela.core.coverage import Coverage
 
 
 class Severity(IntEnum):
@@ -189,10 +193,10 @@ class ScanResult:
     started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     finished_at: datetime | None = None
     tool_version: str = ""
-    coverage: object | None = None
+    coverage: Coverage | None = None
     """:class:`~sentinela.core.coverage.Coverage` desta varredura — o que rodou e o que
-    ficou de fora. ``object`` no anotador para não criar import circular (models é a base);
-    o produtor (motor) e os consumidores (score, relatório) sabem o tipo concreto."""
+    ficou de fora. Import só sob ``TYPE_CHECKING`` (coverage importa models: seria circular
+    em runtime); com ``from __future__ import annotations`` a anotação é avaliada lazy."""
     ambiente: dict[str, str] = field(default_factory=dict)
     """Condições em que ESTA varredura rodou (Python, OpenSSL, resolvedor, modo).
 

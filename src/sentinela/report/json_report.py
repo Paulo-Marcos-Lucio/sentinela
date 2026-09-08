@@ -12,10 +12,15 @@ obrigava um consumidor a manter uma tabela de-para só para a Sentinela.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sentinela.core.models import Finding, ScanResult
 from sentinela.core.proveniencia import descobrir_commit, hash_do_catalogo, serializar_com_selo
 from sentinela.knowledge.mapping import OWASP_EDICAO, tag_for
 from sentinela.report._shared import SEVERITY_ORDER, score_of
+
+if TYPE_CHECKING:
+    from sentinela.core.coverage import Coverage
 
 SCHEMA = "suite-appsec/1"
 
@@ -64,7 +69,7 @@ def render_json(result: ScanResult) -> str:
     return serializar_com_selo(payload)
 
 
-def _coverage_dict(coverage: object | None) -> dict[str, object] | None:
+def _coverage_dict(coverage: Coverage | None) -> dict[str, object] | None:
     if coverage is None:
         return None
     return {

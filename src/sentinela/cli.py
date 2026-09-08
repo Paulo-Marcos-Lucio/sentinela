@@ -337,7 +337,7 @@ def _maybe_fail(result: ScanResult, limite: Severity | None, rotulo: str) -> Non
     # Cobertura parcial não é aprovação. Sem esta trava, `--somente securityheaders
     # --falhar-em high` fica verde para sempre — o gate certifica um alvo que mal olhou.
     cobertura = result.coverage
-    if cobertura is not None and getattr(cobertura, "parcial", False):
+    if cobertura is not None and cobertura.parcial:
         err_console.print(
             f"[yellow]Cobertura parcial[/] ({len(cobertura.executadas)} de "
             f"{cobertura.base_total} checagens): não avaliado — {cobertura.resumo_omissoes()}. "
