@@ -16,45 +16,10 @@ from urllib.parse import urljoin
 
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
+from sentinela.core.disclosure import SENSIVEL_RE
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
-# Termos que, num caminho de Disallow, sugerem área sensível/administrativa.
-_SENSIVEIS = (
-    "admin",
-    "backup",
-    "config",
-    "secret",
-    "senha",
-    "password",
-    "private",
-    "interno",
-    "internal",
-    "db",
-    "database",
-    "sql",
-    "dump",
-    "old",
-    "bak",
-    "test",
-    "staging",
-    "homolog",
-    "git",
-    "svn",
-    "apikey",
-    "api-key",
-    "token",
-    "credential",
-    "wp-admin",
-    "phpmyadmin",
-    "console",
-    "painel",
-    "manager",
-    "debug",
-)
-# Termo sensível ancorado no início do caminho ou após um separador — evita casar
-# 'log' dentro de 'blog' ou 'test' dentro de 'contest'.
-_SENS_RE = re.compile(r"(?:^|[/._\-])(?:" + "|".join(_SENSIVEIS) + r")", re.IGNORECASE)
 _DISALLOW_RE = re.compile(r"^\s*Disallow\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 
@@ -82,7 +47,7 @@ class WellKnownChecker(Checker):
             caminho = match.group(1)
             if caminho in ("/", "*"):
                 continue
-            if _SENS_RE.search(caminho):
+            if SENSIVEL_RE.search(caminho):
                 sensiveis.append(caminho)
 
         if not sensiveis:

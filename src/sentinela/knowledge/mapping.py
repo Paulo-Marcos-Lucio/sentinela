@@ -108,6 +108,10 @@ _TAGS: dict[str, Tag] = {
     "SVN_EXPOSTO": Tag(A02, "CWE-527", "Exposure of Version-Control Repository to Web"),
     "APACHE_STATUS_EXPOSTO": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
     "PHPINFO_EXPOSTO": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "EXFILTRACAO_DE_DADOS": Tag(
+        A02, "CWE-538", "Insertion of Sensitive Information into Externally-Accessible File"
+    ),
+    "SONDAGEM_TRUNCADA": Tag(None, None, None),
     # TLS / certificado -> A04 Cryptographic Failures
     "CERT_EXPIRADO": Tag(A04, "CWE-298", "Improper Validation of Certificate Expiration"),
     "CERT_EXPIRANDO": Tag(A04, "CWE-298", "Improper Validation of Certificate Expiration"),

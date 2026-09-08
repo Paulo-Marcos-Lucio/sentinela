@@ -232,6 +232,15 @@ _PLAIN: dict[str, str] = {
         "O arquivo de configuração (.env) — que costuma guardar SENHAS de banco, chaves de API e "
         "segredos — está acessível pela web. É o cofre da loja com a porta escancarada pra rua."
     ),
+    "EXFILTRACAO_DE_DADOS": (
+        "Uma rota do site devolve, para qualquer visitante e sem pedir senha, um arquivo com "
+        "DADOS que deveriam ser internos — um backup do banco, um despejo de memória, um "
+        "arquivo de credenciais. Não é uma porta destrancada: é o arquivo já do lado de fora, "
+        "na calçada. Se houver dado de cliente ali, é incidente com dever de comunicação."
+    ),
+    "SONDAGEM_TRUNCADA": (
+        "O site anunciou mais endereços do que coube conferir numa passada só. Os que sobraram não foram considerados seguros — eles simplesmente NÃO foram olhados."
+    ),
     "SVN_EXPOSTO": (
         "Metadados de controle de versão (.svn) expostos revelam a estrutura e trechos do seu "
         "código — como deixar rascunhos da planta baixa acessíveis a qualquer um."
