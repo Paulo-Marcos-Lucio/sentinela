@@ -80,20 +80,36 @@ class TransportChecker(Checker):
             return
 
         status = http_probe.status_code
-        location = http_probe.header("Location") or ""
-        redireciona_https = 300 <= status < 400 and location.lower().startswith("https://")
 
-        # Se a porta 80 respondeu (2xx/sem redirect https), servir HTTP é um problema.
-        if not redireciona_https and status and status < 400:
+        # Decidir pelo ESQUEMA FINAL da cadeia, não pelo 1º `Location`. A sonda HTTP segue
+        # os redirecionamentos (`_probe_http` usa follow_redirects=True), então `final_url`
+        # é onde a cadeia parou. O achado de campo do Paulo: um `http:// → /rota (Location
+        # RELATIVO) → https://…` sobe para TLS de verdade, mas o primeiro salto é um
+        # caminho relativo que NÃO começa com "https://" — olhar só o 1º Location marcava
+        # esses sites como "não redireciona" (falso positivo). Já um `http:// → /rota →
+        # http:// 200` nunca chega a HTTPS: o achado permanece, com a URL FINAL na evidência.
+        final_url = http_probe.final_url or ""
+        if final_url.lower().startswith("https://"):
+            return  # a cadeia terminou em HTTPS: o upgrade acontece, mesmo via salto relativo
+
+        # A cadeia terminou (ou parou) em HTTP com resposta utilizável (< 400): o host serve
+        # texto aberto sem subir para HTTPS.
+        if status and status < 400:
+            cadeia = http_probe.redirect_chain
+            trilha = " → ".join(cadeia) if len(cadeia) > 1 else ""
+            evidencia = f"URL final: {final_url or 'http'} · HTTP {status}"
+            if trilha:
+                evidencia += f" · cadeia: {trilha}"
             yield Finding(
                 id="SEM_REDIRECT_HTTPS",
                 title="HTTP não redireciona para HTTPS",
                 category=self.category,
                 severity=Severity.MEDIUM,
                 description=(
-                    f"A versão HTTP do site respondeu com status {status} sem redirecionar para HTTPS."
+                    f"A versão HTTP do site terminou em `{final_url or 'HTTP'}` (status {status}) "
+                    "sem chegar a HTTPS — o redirecionamento, se existe, não sobe para TLS."
                 ),
-                evidence=f"HTTP {status}" + (f" · Location: {location}" if location else ""),
+                evidence=evidencia,
                 impact=(
                     "Servir conteúdo por HTTP permite interceptação e adulteração "
                     "do tráfego em redes não confiáveis, além de captura de "

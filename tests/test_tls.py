@@ -11,7 +11,16 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding
 from cryptography.x509.oid import NameOID
 
-from sentinela.checks.tls import TlsChecker, _hostname_matches, _san_dns_names
+from sentinela.checks.tls import (
+    TlsChecker,
+    _classificar_confianca,
+    _FalhaConfianca,
+    _hostname_matches,
+    _san_dns_names,
+)
+
+# Falha de cadeia "não confiável" (autoassinado): o formato que `_trust_error` agora devolve.
+_NAO_CONFIAVEL = _FalhaConfianca("self signed certificate", incompleta=False)
 
 _DER = Encoding.DER
 
@@ -207,7 +216,7 @@ def test_run_costura_certificado_confianca_e_protocolos(monkeypatch) -> None:  #
         "_fetch_certificate",
         lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.2", "AES128-GCM-SHA256"),
     )
-    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "self signed certificate")
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: _NAO_CONFIAVEL)
     monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: (["TLS 1.0"], []))
 
     ctx = make_context(target=make_target("https://example.com/"))
@@ -220,7 +229,7 @@ def test_run_sem_endpoint_tls_nao_inventa_achado(monkeypatch) -> None:  # type: 
     from conftest import make_context, make_target
 
     monkeypatch.setattr(mod, "_fetch_certificate", lambda *a, **k: (None, None, None))
-    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "erro qualquer")
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: _NAO_CONFIAVEL)
     monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: (["TLS 1.0"], []))
     ctx = make_context(target=make_target("https://example.com/"))
     assert list(mod.TlsChecker().run(ctx)) == []
@@ -308,7 +317,7 @@ def test_run_em_http_porta_nao_padrao_nao_emite_achado_de_cert(monkeypatch) -> N
     monkeypatch.setattr(
         mod, "_fetch_certificate", lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.2", "AES128-GCM-SHA256")
     )
-    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "self signed certificate")
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: _NAO_CONFIAVEL)
     monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
     ctx = make_context(target=make_target("http://host:18080/"))
     assert list(mod.TlsChecker().run(ctx)) == []
@@ -392,3 +401,68 @@ def test_probe_legado_so_credita_versao_realmente_negociada(monkeypatch) -> None
     monkeypatch.setattr(mod.ssl, "SSLContext", lambda *a, **k: _FakeCtx("TLSv1"))
     aceitos2, _ = mod._accepts_legacy_tls("host", 443, 2.0)
     assert "TLS 1.0" in aceitos2
+
+
+# --------------------------------------------------------------------------- #
+# Classe fp-cert-nao-confiavel-cadeia-incompleta (auditoria 2026-09-08).
+# INVARIANTE: 'CA desconhecida/autoassinado' (ALTA) ≠ 'CA pública mas intermediário não
+# servido' (cadeia incompleta, MÉDIA). O critério é o verify_code (20/21 = emissor local
+# ausente = cadeia incompleta). O oráculo é a classificação PURA por código — testável
+# sem handshake, atacando a classe e não o exemplo tjrj.
+# --------------------------------------------------------------------------- #
+def test_classificar_confianca_codigo_20_21_e_cadeia_incompleta() -> None:
+    for code in (20, 21):
+        falha = _classificar_confianca(code, "unable to get local issuer certificate")
+        assert falha is not None and falha.incompleta is True, code
+
+
+def test_classificar_confianca_autoassinado_e_ca_desconhecida_nao_e_incompleta() -> None:
+    # 18 = self-signed (depth 0); 19 = self-signed root na cadeia. Continuam 'não confiável'.
+    for code in (18, 19):
+        falha = _classificar_confianca(code, "self signed certificate")
+        assert falha is not None and falha.incompleta is False, code
+
+
+def test_classificar_confianca_expiracao_e_hostname_tem_checagem_dedicada() -> None:
+    # Não duplicar: expiração e hostname divergente já têm achado próprio -> None.
+    assert _classificar_confianca(9, "certificate is not yet valid") is None
+    assert _classificar_confianca(10, "certificate has expired") is None
+    assert _classificar_confianca(62, "Hostname mismatch, certificate is not valid for 'x'") is None
+
+
+def _run_tls_com_falha(monkeypatch, falha: _FalhaConfianca) -> set[str]:  # type: ignore[no-untyped-def]
+    import sentinela.checks.tls as mod
+    from conftest import make_context, make_target
+
+    cert = _cert("example.com")
+    monkeypatch.setattr(
+        mod,
+        "_fetch_certificate",
+        lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.3", "TLS_AES_256_GCM_SHA384"),
+    )
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: falha)
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
+    ctx = make_context(target=make_target("https://example.com/"))
+    return {f.id for f in mod.TlsChecker().run(ctx)}
+
+
+def test_cadeia_incompleta_emite_achado_dedicado_medio_nao_o_alto(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    ids = _run_tls_com_falha(monkeypatch, _FalhaConfianca("unable to get local issuer certificate", True))
+    assert "CERT_CADEIA_INCOMPLETA" in ids
+    assert "CERT_NAO_CONFIAVEL" not in ids  # não pode continuar acusando 'não confiável'
+
+
+def test_ca_desconhecida_continua_sendo_cert_nao_confiavel_alto(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # O lado oposto: autoassinado/CA desconhecida NÃO pode virar 'cadeia incompleta' (média).
+    ids = _run_tls_com_falha(monkeypatch, _FalhaConfianca("self signed certificate", False))
+    assert "CERT_NAO_CONFIAVEL" in ids
+    assert "CERT_CADEIA_INCOMPLETA" not in ids
+
+
+def test_severidade_cadeia_incompleta_e_media_e_nao_confiavel_e_alta(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    from sentinela.core.models import Severity
+
+    inc = TlsChecker._achado_de_confianca(_FalhaConfianca("x", True))
+    desc = TlsChecker._achado_de_confianca(_FalhaConfianca("x", False))
+    assert inc.severity is Severity.MEDIUM and inc.id == "CERT_CADEIA_INCOMPLETA"
+    assert desc.severity is Severity.HIGH and desc.id == "CERT_NAO_CONFIAVEL"

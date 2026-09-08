@@ -13,7 +13,7 @@ import socket
 import ssl
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -36,6 +36,25 @@ _HANDSHAKE_TIMEOUT = 6.0
 # e a imprecisão normal do cabeçalho `Date`; acima disso, os achados de expiração de
 # certificado deste relatório deixam de ser confiáveis.
 _DERIVA_MAXIMA_SEGUNDOS = 3600.0
+
+# Códigos de verificação do OpenSSL que dizem "faltou o emissor LOCAL", não "emissor
+# desconhecido/autoassinado":
+#   20 = unable to get local issuer certificate  (o intermediário não foi servido)
+#   21 = unable to verify the first certificate  (a cadeia enviada quebra no topo)
+# Nestes, a âncora (raiz) pode ser uma CA pública perfeitamente confiável — só falta o
+# intermediário na cadeia enviada. É "cadeia incompleta", não "CA desconhecida": o navegador
+# em geral recupera via AIA, mas clientes estritos (Android antigo, libs sem AIA) falham. Já
+# um certificado autoassinado/CA privada desconhecida cai em 18/19 e continua "não confiável".
+_CODIGOS_CADEIA_INCOMPLETA = frozenset({20, 21})
+
+
+@dataclass(frozen=True, slots=True)
+class _FalhaConfianca:
+    """Falha de validação de CADEIA classificada. `incompleta=True` ⇒ intermediário não
+    servido (CA pode ser pública, severidade menor); `False` ⇒ CA desconhecida/autoassinada."""
+
+    mensagem: str
+    incompleta: bool
 
 
 class TlsChecker(Checker):
@@ -89,23 +108,7 @@ class TlsChecker(Checker):
         for finding in self._check_key_and_signature(cert):
             yield self._carimbar(finding, endpoint)
         if trust_error is not None:
-            yield self._carimbar(
-                Finding(
-                    id="CERT_NAO_CONFIAVEL",
-                    title="Certificado não confiável",
-                    category=self.category,
-                    severity=Severity.HIGH,
-                    description="A validação padrão do certificado falhou (cadeia não confiável).",
-                    evidence=trust_error,
-                    impact=(
-                        "Certificados autoassinados ou de cadeia incompleta fazem o "
-                        "navegador alertar o usuário e comprometem a confiança na conexão."
-                    ),
-                    recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
-                    references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
-                ),
-                endpoint,
-            )
+            yield self._carimbar(self._achado_de_confianca(trust_error), endpoint)
         yield from self._check_protocols(legados, legados_nao_avaliados)
         yield from self._check_tls_hardening(tls_version, tls_cipher)
 
@@ -131,6 +134,51 @@ class TlsChecker(Checker):
         if endpoint is None or finding.subject is not None:
             return finding
         return replace(finding, subject=endpoint)
+
+    @staticmethod
+    def _achado_de_confianca(falha: _FalhaConfianca) -> Finding:
+        """Traduz a falha de cadeia no achado certo: 'cadeia incompleta' (intermediário não
+        servido — CA pode ser pública, MÉDIA) ≠ 'não confiável' (CA desconhecida/autoassinada,
+        ALTA). Um portaltj.tjrj com GlobalSign sem intermediário deixou de ser laudado como
+        certificado autoassinado — o navegador confia via AIA; clientes estritos, não."""
+        if falha.incompleta:
+            return Finding(
+                id="CERT_CADEIA_INCOMPLETA",
+                title="Cadeia de certificação incompleta (intermediário não enviado)",
+                category=Category.TLS,
+                severity=Severity.MEDIUM,
+                description=(
+                    "A validação falhou por falta do certificado intermediário na cadeia enviada "
+                    "pelo servidor — a raiz é uma CA conhecida, mas o elo intermediário não foi "
+                    "servido."
+                ),
+                evidence=falha.mensagem,
+                impact=(
+                    "Navegadores de mesa costumam recuperar o intermediário sozinhos (via AIA) e "
+                    "não alertam — mas clientes estritos (Android antigo, apps móveis, bibliotecas "
+                    "sem AIA, algumas APIs) NÃO recuperam e recusam a conexão. O certificado é "
+                    "válido; a CONFIGURAÇÃO da cadeia é que está incompleta."
+                ),
+                recommendation=(
+                    "Configure o servidor para enviar a cadeia COMPLETA (certificado da entidade "
+                    "+ intermediário(s)), o chamado 'fullchain'."
+                ),
+                references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
+            )
+        return Finding(
+            id="CERT_NAO_CONFIAVEL",
+            title="Certificado não confiável",
+            category=Category.TLS,
+            severity=Severity.HIGH,
+            description="A validação padrão do certificado falhou (CA desconhecida ou autoassinado).",
+            evidence=falha.mensagem,
+            impact=(
+                "Um certificado autoassinado ou emitido por uma CA que o cliente não reconhece "
+                "faz o navegador alertar o usuário e compromete a confiança na conexão."
+            ),
+            recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
+            references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
+        )
 
     def _check_relogio(self, ctx: ScanContext) -> Iterable[Finding]:
         """Compara o relógio local com o do alvo, porque a validade do certificado é
@@ -458,9 +506,26 @@ def _contexto_de_confianca() -> ssl.SSLContext:
         return ssl.create_default_context()
 
 
-def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> str | None:
-    """``None`` se a cadeia é confiável (ou a falha já tem checagem dedicada); caso
-    contrário, a mensagem curta da falha de CADEIA de confiança."""
+def _classificar_confianca(code: int | None, msg: str) -> _FalhaConfianca | None:
+    """Classifica uma falha de verificação de cadeia — ou ``None`` quando a causa já tem
+    checagem dedicada (expiração/hostname), para não duplicar achado.
+
+    É PURA (não toca a rede) de propósito: assim a regra 'cadeia incompleta (20/21) ≠ CA
+    desconhecida' fica testável por si, sem handshake — é onde mora o invariante da classe."""
+    low = msg.lower()
+    # Expiração e hostname divergente já têm checagens dedicadas — não duplicar aqui.
+    if code in (9, 10) or "expired" in low or "hostname mismatch" in low or "not valid for" in low:
+        return None
+    return _FalhaConfianca(
+        mensagem=truncate(msg, 160),
+        incompleta=code in _CODIGOS_CADEIA_INCOMPLETA,
+    )
+
+
+def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> _FalhaConfianca | None:
+    """``None`` se a cadeia é confiável (ou a falha já tem checagem dedicada); caso contrário,
+    a falha de CADEIA classificada em 'incompleta' (20/21) vs 'não confiável' (autoassinado/CA
+    desconhecida) — ver :func:`_classificar_confianca`."""
     context = _contexto_de_confianca()
     try:
         with (
@@ -470,11 +535,8 @@ def _trust_error(host: str, port: int, timeout: float = _HANDSHAKE_TIMEOUT) -> s
             return None
     except ssl.SSLCertVerificationError as exc:
         code = getattr(exc, "verify_code", None)
-        msg = str(getattr(exc, "verify_message", "") or exc).lower()
-        # Expiração e hostname divergente já têm checagens dedicadas — não duplicar.
-        if code in (9, 10) or "expired" in msg or "hostname mismatch" in msg or "not valid for" in msg:
-            return None
-        return truncate(str(exc), 160)
+        msg = str(getattr(exc, "verify_message", "") or exc) or str(exc)
+        return _classificar_confianca(code, msg)
     except (OSError, ssl.SSLError):
         return None
 

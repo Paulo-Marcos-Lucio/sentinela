@@ -50,6 +50,7 @@ _TAGS: dict[str, Tag] = {
     "ALVO_BLOQUEADO": Tag(None, None, None),
     "RESPOSTA_DE_ERRO": Tag(None, None, None),
     "ALVO_REDIRECIONADO_OUTRO_HOST": Tag(None, None, None),
+    "COLETA_PRIMARIA_RECUPERADA": Tag(None, None, None),
     # Cabeçalhos de segurança -> A02 Security Misconfiguration
     "XCTO_AUSENTE": Tag(A02, "CWE-693", "Protection Mechanism Failure"),
     "REFERRER_POLICY_AUSENTE": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
@@ -119,6 +120,7 @@ _TAGS: dict[str, Tag] = {
     "CERT_CHAVE_FRACA": Tag(A04, "CWE-326", "Inadequate Encryption Strength"),
     "CERT_ASSINATURA_FRACA": Tag(A04, "CWE-327", "Use of a Broken or Risky Cryptographic Algorithm"),
     "CERT_NAO_CONFIAVEL": Tag(A04, "CWE-295", "Improper Certificate Validation"),
+    "CERT_CADEIA_INCOMPLETA": Tag(A04, "CWE-295", "Improper Certificate Validation"),
     "TLS_PROTOCOLO_LEGADO": Tag(A04, "CWE-327", "Use of a Broken or Risky Cryptographic Algorithm"),
     "TLS_SEM_PFS": Tag(A04, "CWE-326", "Inadequate Encryption Strength"),
     "TLS_13_AUSENTE": Tag(A04, None, None),
@@ -159,6 +161,9 @@ _TAGS: dict[str, Tag] = {
         A05, "CWE-79", "Improper Neutralization of Input During Web Page Generation (XSS)"
     ),
     "DADO_SENSIVEL_NA_URL": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
+    "DADO_PESSOAL_NA_URL": Tag(
+        A04, "CWE-359", "Exposure of Private Personal Information to an Unauthorized Actor"
+    ),
 }
 
 

@@ -111,3 +111,69 @@ def test_cookie_de_sessao_com_csrf_no_nome_continua_medio() -> None:
 def test_access_token_continua_medio() -> None:
     ids = _run(("access_token=abc; Secure; SameSite=Lax",))
     assert "COOKIE_SEM_HTTPONLY" in ids
+
+
+# =========================================================================== #
+# Classe cookies-analytics-session-classificado-auth (auditoria 2026-09-08).
+# INVARIANTE: id de sessão de ANALYTICS/telemetria não é sessão de AUTENTICAÇÃO.
+# =========================================================================== #
+from sentinela.checks.cookies import _e_telemetria, _is_session_like  # noqa: E402
+
+
+def test_cookie_de_telemetria_nao_e_sessao_de_autenticacao() -> None:
+    # Nomes de analytics/telemetria — mesmo trazendo 'session'/'identity' e valor opaco.
+    casos = [
+        ("_mldataSessionId", ""),
+        ("amplitude-session-id", ""),
+        ("visitor_session_id", ""),
+        ("kndctr_ABC123_AdobeOrg_identity", "aGVsbG9vcGFxdWVibG9i9f3c8d2e1a"),
+    ]
+    for nome, valor in casos:
+        assert _e_telemetria(nome), nome
+        assert not _is_session_like(nome, valor), nome
+
+
+def test_sessao_de_autenticacao_real_continua_sendo_sessao() -> None:
+    # O lado que NÃO pode afrouxar: sessões reais continuam classificadas como auth.
+    for nome, valor in [
+        ("JSESSIONID", "x"),
+        ("session_token", "x"),
+        ("access_token", "x"),
+        ("PHPSESSID", "x"),
+    ]:
+        assert not _e_telemetria(nome), nome
+        assert _is_session_like(nome, valor), nome
+
+
+def test_analytics_sem_httponly_e_low_nao_medium() -> None:
+    # Cookie de telemetria sem HttpOnly cai no balde funcional (BAIXA), não em auth (MÉDIA).
+    ids = _run(("kndctr_ABC_AdobeOrg_identity=blob9f3c8d2e1a4b; Secure; SameSite=Lax",))
+    assert "COOKIE_SEM_HTTPONLY_FUNCIONAL" in ids
+    assert "COOKIE_SEM_HTTPONLY" not in ids
+
+
+def test_analytics_nao_engole_o_achado_funcional_do_ga() -> None:
+    # Antes: o cookie Adobe classificado como 'sessão' suprimia o achado funcional de `_ga`.
+    ids = _run(
+        (
+            "_ga=GA1.2.123456; Secure; SameSite=Lax",
+            "kndctr_ABC_AdobeOrg_identity=blob9f3c8d2e1a4b; Secure; SameSite=Lax",
+        )
+    )
+    findings = {
+        f.id: f
+        for f in CookiesChecker().run(
+            make_context(
+                primary=make_probe(
+                    set_cookies=(
+                        "_ga=GA1.2.123456; Secure; SameSite=Lax",
+                        "kndctr_ABC_AdobeOrg_identity=blob9f3c8d2e1a4b; Secure; SameSite=Lax",
+                    )
+                )
+            )
+        )
+    }
+    assert "COOKIE_SEM_HTTPONLY_FUNCIONAL" in ids
+    assert "COOKIE_SEM_HTTPONLY" not in ids  # nenhum é auth -> nada de MÉDIA
+    # o `_ga` aparece de fato no achado funcional (não foi engolido)
+    assert "_ga" in findings["COOKIE_SEM_HTTPONLY_FUNCIONAL"].evidence

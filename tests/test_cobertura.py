@@ -118,13 +118,63 @@ def test_cobertura_plena_e_sem_achado_pode_tirar_A() -> None:
 
 
 def test_cobertura_parcial_sem_achado_nao_tira_A() -> None:
-    # Invariante 2: parcial não certifica A.
+    # Invariante 2: parcial não certifica A. _cov_parcial roda 1 de 3 checagens da base
+    # (frac ≈ .33 < .5) ⇒ o teto que ESCALA rebaixa até D, não só um degrau A→B.
     score = compute_score([], _cov_parcial())
-    assert score.grade == "B"
+    assert score.grade == "D"
     # Invariante 1: o resumo nomeia o que ficou de fora, não diz "sólida".
     assert "sólida" not in score.summary.lower()
     assert "parcial" in score.summary.lower()
     assert "tls" in score.summary and "dns-email" in score.summary
+
+
+# --------------------------------------------------------------------------- #
+# Teto de cobertura ESCALA com a fração executada (não é um degrau fixo A→B).
+# --------------------------------------------------------------------------- #
+def _cov_frac(executadas: int, omitidas: int) -> Coverage:
+    """Cobertura parcial com fração controlada: `executadas`/(executadas+omitidas)."""
+    base = [f"chk-{i}" for i in range(executadas + omitidas)]
+    return Coverage(
+        executadas=tuple(base[:executadas]),
+        por_operador=tuple(base[executadas:]),
+        por_modo=(),
+        por_erro=(),
+    )
+
+
+def test_teto_de_cobertura_escala_com_a_fracao() -> None:
+    # Mesmo conjunto (vazio) de achados; só a fração de checagens executada muda.
+    assert compute_score([], _cov_frac(3, 1)).grade == "B"  # frac .75 ⇒ teto B
+    assert compute_score([], _cov_frac(2, 2)).grade == "C"  # frac .50 ⇒ teto C
+    assert compute_score([], _cov_frac(1, 3)).grade == "D"  # frac .25 ⇒ teto D
+    assert compute_score([], _cov_frac(1, 9)).grade == "D"  # frac .10 ⇒ nunca melhor que D
+
+
+def test_conceito_nunca_melhora_quando_a_fracao_cai() -> None:
+    # Invariante de monotonicidade: com achados fixos, reduzir a cobertura nunca eleva o
+    # conceito. (A ordem A<B<C<D<F é crescente em severidade.)
+    ordem = "ABCDF"
+    fracoes = [_cov_frac(9, 1), _cov_frac(3, 1), _cov_frac(2, 2), _cov_frac(1, 3)]
+    graus = [ordem.index(compute_score([], cov).grade) for cov in fracoes]
+    assert graus == sorted(graus), graus  # não decresce em severidade conforme a fração cai
+
+
+def test_teto_de_cobertura_nunca_eleva_conceito_ja_pior() -> None:
+    # Nota-por-valor já em C (4 MÉDIOS = -32 ⇒ 68) com cobertura alta (teto B): o teto NÃO
+    # promove C para B. `_pior_conceito` sempre mantém o pior dos dois.
+    medios = [
+        Finding(
+            id=f"CSP_ESTILO_INLINE_{i}",
+            title="x",
+            category=Category.HEADERS,
+            severity=Severity.MEDIUM,
+            description="d",
+            recommendation="r",
+        )
+        for i in range(4)
+    ]
+    score = compute_score(medios, _cov_frac(3, 1))  # frac .75 ⇒ teto B
+    assert score.value == 68 and score.grade == "C"
 
 
 def test_sem_cobertura_mantem_comportamento_antigo() -> None:

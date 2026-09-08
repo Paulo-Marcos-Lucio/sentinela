@@ -39,14 +39,14 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 | Módulo | O que analisa | OWASP 2025 |
 | --- | --- | --- |
 | **Cabeçalhos** | HSTS, CSP com **análise profunda** (curinga, `object-src`, `base-uri`, `report-only`), X-Content-Type-Options, X-Frame-Options / clickjacking, Referrer-Policy, Permissions-Policy, COOP, X-XSS-Protection legado | A02 / A04 |
-| **TLS / Certificado** | Protocolos legados (TLS 1.0/1.1), **ausência de TLS 1.3**, cifra **sem Perfect Forward Secrecy**, certificado expirado/expirando, hostname divergente, chave RSA fraca, assinatura obsoleta, cadeia não confiável | A04 |
-| **Transporte** | Redirecionamento de HTTP → HTTPS | A04 |
-| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` — inclui `SameSite=None` inseguro e prefixos `__Host-`/`__Secure-` | A01 / A02 / A04 / A07 |
+| **TLS / Certificado** | Protocolos legados (TLS 1.0/1.1), **ausência de TLS 1.3**, cifra **sem Perfect Forward Secrecy**, certificado expirado/expirando, hostname divergente, chave RSA fraca, assinatura obsoleta, cadeia não confiável — distinguindo **CA desconhecida** (alta) de **cadeia incompleta** (intermediário não enviado; o navegador recupera via AIA, clientes estritos recusam) | A04 |
+| **Transporte** | Redirecionamento de HTTP → HTTPS — segue a **cadeia inteira** de redirects e decide pelo **esquema final** (um `http:// → /rota → https://` sobe por salto relativo e não é falso positivo) | A04 |
+| **Cookies** | Flags `Secure`, `HttpOnly`, `SameSite` — inclui `SameSite=None` inseguro e prefixos `__Host-`/`__Secure-`; um id de **analytics/telemetria** (Adobe, Amplitude…) não é confundido com sessão de autenticação | A01 / A02 / A04 / A07 |
 | **CORS** | Reflexão de origem, curinga com credenciais, políticas permissivas | A01 |
 | **Métodos HTTP** | `TRACE` (XST), métodos de escrita expostos (`PUT`/`DELETE`) | A02 |
 | **Exposição de info** | Versão de servidor/stack vazada, listagem de diretório | A02 |
 | **Conteúdo da página** | Conteúdo misto (*mixed content*), ausência de **SRI** em recursos de terceiros, formulário com `action` insegura, campo de senha sem HTTPS, cache de página sensível sem `no-store` | A02 / A03 / A04 |
-| **Formulários & injeção (passiva)** | Credencial trafegando em formulário `GET`, formulário com credencial postando para `http://` (conteúdo misto), formulário que muda estado sem token anti-CSRF, parâmetro refletido sem escape (superfície de XSS) e dado sensível na query string — lendo só o HTML já baixado, **sem enviar um único payload de ataque** | A01 / A04 / A05 / A07 |
+| **Formulários & injeção (passiva)** | Credencial trafegando em formulário `GET` (por **token inteiro** do nome do campo, não substring — `author`/`wildcard` não disparam), formulário com credencial postando para `http://` (conteúdo misto), formulário que muda estado sem token anti-CSRF (reconhece o `nonce` do WordPress), parâmetro refletido sem escape (superfície de XSS), dado sensível na query string e **CPF/CNPJ na URL** como questão de **LGPD** (privacidade, não credencial) — lendo só o HTML já baixado, **sem enviar um único payload de ataque**; forms de SPA controlados por handler de framework (`onSubmit`/`@submit.prevent`/`(ngSubmit)`) não são falsamente acusados | A01 / A04 / A05 / A07 |
 | **Arquivos públicos** | `robots.txt` (RFC 9309) revelando caminhos sensíveis por convenção | A02 |
 | **Arquivos e rotas sensíveis** | `.git/HEAD`, `.env`, `.svn/entries`, `mod_status` do Apache, `phpinfo()` — cada caminho com **assinatura de conteúdo** própria, para não confundir um 200 genérico de SPA com o artefato de verdade — opt-in `--autorizado` (é tráfego que vai além de visitar o site) | A02 |
 | **Superfície de ataque** | Descoberta de subdomínios via **Certificate Transparency** e detecção de **subdomain takeover** (CNAME órfão) — opt-in `--descobrir` | A02 |
@@ -161,6 +161,8 @@ Principais opções do `scan`:
 | `--sem-verificacao-tls` | **INSEGURO**: desabilita a validação de certificado nas conexões (sujeito a MITM). Os achados de TLS continuam sendo reportados. |
 
 **Códigos de saída:** `0` varredura concluída · `1` achado no nível de `--falhar-em` ou acima · `2` erro de uso (alvo inválido, ID de checagem inexistente, nível desconhecido).
+
+> **Varredura parcial não vira nota cheia.** Quando `--pular`/`--somente`/`--perfil rapido` reduzem a cobertura (ou uma checagem falha), o **conceito** é tetado pela fração do catálogo que de fato rodou — cobri ≥¾ das checagens teta em **B**, ≥metade em **C**, abaixo disso em **D**; uma varredura parcial **nunca** tira **A**. O teto acompanha o quanto se olhou (não é um degrau fixo) e o resumo nomeia o que ficou de fora — o que não foi medido não é certificado como são.
 
 **Padrão de `--fail-on` na suíte** — os defaults NÃO são iguais, e isso é deliberado:
 

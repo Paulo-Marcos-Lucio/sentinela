@@ -41,14 +41,14 @@ This "basic" layer is exactly what a well-executed diagnostic finds **before** t
 | Module | What it analyzes | OWASP 2025 |
 | --- | --- | --- |
 | **Headers** | HSTS, CSP with **in-depth analysis** (wildcard, `object-src`, `base-uri`, `report-only`), X-Content-Type-Options, X-Frame-Options / clickjacking, Referrer-Policy, Permissions-Policy, COOP, legacy X-XSS-Protection | A02 |
-| **TLS / Certificate** | Legacy protocols (TLS 1.0/1.1), **absence of TLS 1.3**, cipher **without Perfect Forward Secrecy**, expired/expiring certificate, mismatched hostname, weak RSA key, obsolete signature, untrusted chain | A04 |
-| **Transport** | HTTP → HTTPS redirection | A04 |
-| **Cookies** | `Secure`, `HttpOnly`, `SameSite` flags — includes insecure `SameSite=None` and `__Host-`/`__Secure-` prefixes | A01 / A04 / A07 |
+| **TLS / Certificate** | Legacy protocols (TLS 1.0/1.1), **absence of TLS 1.3**, cipher **without Perfect Forward Secrecy**, expired/expiring certificate, mismatched hostname, weak RSA key, obsolete signature, untrusted chain — distinguishing an **unknown CA** (high) from an **incomplete chain** (intermediate not served; browsers recover via AIA, strict clients reject) | A04 |
+| **Transport** | HTTP → HTTPS redirection — follows the **whole redirect chain** and decides by the **final scheme** (an `http:// → /path → https://` upgrade via a relative hop is not a false positive) | A04 |
+| **Cookies** | `Secure`, `HttpOnly`, `SameSite` flags — includes insecure `SameSite=None` and `__Host-`/`__Secure-` prefixes; an **analytics/telemetry** id (Adobe, Amplitude…) is not mistaken for an authentication session | A01 / A04 / A07 |
 | **CORS** | Origin reflection, wildcard with credentials, permissive policies | A01 |
 | **HTTP Methods** | `TRACE` (XST), exposed write methods (`PUT`/`DELETE`) | A02 |
 | **Info exposure** | Leaked server/stack version, directory listing | A02 |
 | **Page content** | Mixed content, missing **SRI** on third-party resources, form with insecure `action`, password field without HTTPS | A03 / A04 |
-| **Forms & injection (passive)** | Credentials traveling through a `GET` form, form with credentials posting to `http://` (mixed content), state-changing form without an anti-CSRF token, reflected parameter without escaping (XSS surface), and sensitive data in the query string — reading only the already-downloaded HTML, **without sending a single attack payload** | A01 / A04 / A05 / A07 |
+| **Forms & injection (passive)** | Credentials traveling through a `GET` form (matched by **whole name token**, not substring — `author`/`wildcard` don't fire), form with credentials posting to `http://` (mixed content), state-changing form without an anti-CSRF token (recognizes WordPress's `nonce`), reflected parameter without escaping (XSS surface), sensitive data in the query string, and **CPF/CNPJ in the URL** as an **LGPD** matter (privacy, not credential) — reading only the already-downloaded HTML, **without sending a single attack payload**; SPA forms controlled by a framework handler (`onSubmit`/`@submit.prevent`/`(ngSubmit)`) are not falsely flagged | A01 / A04 / A05 / A07 |
 | **Public files** | `robots.txt` (RFC 9309) revealing sensitive paths by convention | A02 |
 | **Attack surface** | Subdomain discovery via **Certificate Transparency** and **subdomain takeover** detection (orphaned CNAME) — opt-in `--descobrir` | A02 |
 | **DNS / Email** | SPF, DMARC (policy), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
@@ -162,6 +162,8 @@ Main `scan` options:
 | `--sem-verificacao-tls` | **INSECURE**: disables certificate validation on connections (subject to MITM). TLS findings are still reported. |
 
 **Exit codes:** `0` scan completed · `1` finding at the `--falhar-em` level or above · `2` usage error (invalid target, nonexistent check ID, unknown level).
+
+> **A partial scan doesn't earn a full grade.** When `--pular`/`--somente`/`--perfil rapido` reduce coverage (or a check fails), the **grade** is capped by the fraction of the catalog that actually ran — covering ≥¾ of the checks caps at **B**, ≥half at **C**, below that at **D**; a partial scan **never** earns an **A**. The cap scales with how much was looked at (it's not a fixed one-notch drop) and the summary names what was left out — what wasn't measured isn't certified as sound.
 
 **`--fail-on` default across the suite** — the defaults are NOT the same, and that's deliberate:
 

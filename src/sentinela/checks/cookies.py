@@ -104,6 +104,21 @@ def _tokens_do_nome(name: str) -> list[str]:
     return [t for t in re.split(r"[^a-zA-Z0-9]+", espacado.lower()) if t]
 
 
+# Marcadores de cookie de ANALYTICS/TELEMETRIA: um id de sessão de medição (Adobe Experience
+# Cloud `kndctr_*_AdobeOrg_*`, Amplitude, a plataforma de dados `_ml*`, id de VISITANTE
+# anônimo) NÃO é uma sessão de AUTENTICAÇÃO — roubá-lo não sequestra conta nenhuma. Esses
+# nomes traziam a sílaba 'session'/'identity' e eram classificados como auth (MÉDIA + texto de
+# sequestro), o que também suprimia o achado funcional de cookies como `_ga` no mesmo site.
+_TELEMETRIA_MARCADORES = ("kndctr", "amplitude", "_ml", "adobeorg", "visitor", "mixpanel")
+
+
+def _e_telemetria(name: str) -> bool:
+    """O cookie é de medição/telemetria (não de autenticação)? Reconhecido por marcador de
+    fornecedor no nome. É deliberadamente conservador — só nomes inequívocos de analytics."""
+    low = name.lower()
+    return any(m in low for m in _TELEMETRIA_MARCADORES)
+
+
 # Cookie de CSRF no padrão double-submit (Laravel/Axios `XSRF-TOKEN`, Django `csrftoken`,
 # Angular `XSRF-TOKEN`, csurf `_csrf`): o JavaScript PRECISA lê-lo para copiar o valor no
 # cabeçalho — marcá-lo HttpOnly QUEBRA a aplicação, e a doc do Django diz explicitamente
@@ -126,7 +141,13 @@ def _is_session_like(name: str, value: str = "") -> bool:
     inteiro no nome (`sess/sid/jwt/token/auth/...`); (3) um token AMBÍGUO
     (`login/access/refresh/remember/identity`) CORROBORADO por um 2º indício — outro token de
     sessão no nome OU um valor com forma de ID/JWT. Sem corroboração, o ambíguo é sinal fraco
-    e NÃO faz sessão — era o FP da classe H7 (`refresh_rate`, `early_access`, `login_layout`)."""
+    e NÃO faz sessão — era o FP da classe H7 (`refresh_rate`, `early_access`, `login_layout`).
+
+    Antes de tudo: um cookie de ANALYTICS/telemetria (Adobe/Amplitude/_ml/visitor) NÃO é
+    sessão de autenticação, por mais que o nome traga 'session'/'identity' e o valor seja um
+    blob opaco. Ele é rebaixado ao balde funcional — senão engolia o achado de `_ga` no site."""
+    if _e_telemetria(name):
+        return False
     lowered = name.lower()
     if any(conhecida in lowered for conhecida in _SESSAO_CONHECIDA):
         return True

@@ -267,8 +267,14 @@ _PLAIN: dict[str, str] = {
         "crachá com a foto errada. O navegador desconfia e bloqueia."
     ),
     "CERT_NAO_CONFIAVEL": (
-        "O documento de identidade não foi emitido por um órgão reconhecido (ou veio incompleto) — "
-        "como um RG feito em casa. O navegador não confia e alerta o usuário."
+        "O documento de identidade não foi emitido por um órgão reconhecido — como um RG feito "
+        "em casa. O navegador não confia e alerta o usuário."
+    ),
+    "CERT_CADEIA_INCOMPLETA": (
+        "O documento de identidade é legítimo, mas veio sem a folha do meio que liga a assinatura "
+        "ao órgão emissor. O balcão principal (navegador) costuma buscar essa folha sozinho e nem "
+        "reclama; balcões mais rígidos (celular antigo, apps, algumas APIs) recusam. Envie a via "
+        "COMPLETA do certificado (com o intermediário)."
     ),
     "CERT_CHAVE_FRACA": (
         "A 'fechadura' criptográfica do certificado é curta demais e pode ser arrombada com poder "
@@ -400,6 +406,11 @@ _PLAIN: dict[str, str] = {
         "Um dado secreto (token, senha) vai escrito na etiqueta de endereço — e essa etiqueta é "
         "copiada em todo livro de registro, histórico e recado a terceiros. Segredo não é lugar de URL."
     ),
+    "DADO_PESSOAL_NA_URL": (
+        "Um dado pessoal do cliente (CPF/CNPJ) vai escrito na etiqueta de endereço, à vista — e "
+        "essa etiqueta é copiada em todo livro de registro, histórico e recado a terceiros. Sob a "
+        "LGPD, dado pessoal não é para ficar exposto na URL."
+    ),
     # --- Contexto da resposta: o que respondeu NÃO era a loja ---
     "ALVO_BLOQUEADO": (
         "Quem atendeu à porta foi o segurança da rua (um WAF/CDN), não a loja: ele barrou a "
@@ -415,6 +426,12 @@ _PLAIN: dict[str, str] = {
         "Ao bater na porta, fomos encaminhados para OUTRO endereço (outro host). A partir dali, o "
         "que a vistoria olhou é a loja de lá, não a que você pediu — e o relatório declara essa "
         "troca para não atribuir a você o que é de um terceiro."
+    ),
+    "COLETA_PRIMARIA_RECUPERADA": (
+        "A primeira batida na porta não foi atendida (a loja recusou o uniforme do vistoriador, ou "
+        "o crachá do portão não pôde ser conferido). Em vez de declarar a loja fechada, o "
+        "vistoriador entrou por um caminho alternativo e seguiu a vistoria — mas o relatório avisa "
+        "que a coleta não foi a padrão, para você conferir o motivo na origem."
     ),
     "CSP_SEM_SCRIPT_SRC": (
         "A lista de fornecedores existe, mas não diz uma palavra sobre QUEM pode entregar SCRIPT. "

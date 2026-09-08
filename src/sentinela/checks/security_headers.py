@@ -137,7 +137,13 @@ class SecurityHeadersChecker(Checker):
         # chegaram. Medido: mesmo alvo, link rápido → CSP_VIA_META (informativo); link
         # lento com o corpo cortado → CSP_AUSENTE (média), afirmando ao cliente que não
         # há CSP num site que tem CSP, e recomendando implantar o que já está lá.
-        corpo_parcial = probe.truncated and not meta
+        #
+        # MAS o truncamento só mascara a CSP se o `<head>` NÃO foi lido por inteiro: a
+        # meta-CSP só vale no `<head>` (o navegador ignora meta-CSP no corpo). Se o `</head>`
+        # (ou o início do `<body>`) já apareceu dentro dos bytes lidos, o head inteiro foi
+        # visto sem meta-CSP — a ausência é CONCLUSIVA mesmo com o corpo cortado depois. Sem
+        # isto, uma página grande sem CSP mascarava CSP_AUSENTE atrás de CSP_NAO_AVALIADA.
+        corpo_parcial = probe.truncated and not meta and not _head_lido_por_inteiro(probe.body_snippet)
 
         # HSTS e X-Content-Type-Options são de TRANSPORTE (valem para JSON/CSS também);
         # CSP, anti-clickjacking, Referrer/Permissions/COOP são de DOCUMENTO.
@@ -588,6 +594,18 @@ _MAX_AGE_RE = re.compile(r'max-age\s*=\s*"?\s*(\d+)', re.IGNORECASE)
 _META_TAG_RE = re.compile(r"<meta\b[^>]{0,2048}>", re.IGNORECASE)
 _META_ATTR_RE = re.compile(r"""\b([a-z][a-z-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _META_SCAN_CAP = 65_536
+# Fim do `<head>`: o `</head>` de fecho, ou o início do `<body>` (o `</head>` é opcional em
+# HTML5 e o `<body>` marca o fim do head na prática). Só onde a meta-CSP ainda poderia estar.
+_FIM_DO_HEAD_RE = re.compile(r"</head\s*>|<body\b", re.IGNORECASE)
+
+
+def _head_lido_por_inteiro(body: str) -> bool:
+    """O `<head>` foi lido por completo dentro da janela em que a meta-CSP é procurada?
+
+    Verdadeiro se `</head>` (ou `<body`) aparece dentro dos primeiros ``_META_SCAN_CAP``
+    bytes — ou seja, a varredura de metatags cobriu o head inteiro. Nesse caso, não ter
+    achado meta-CSP é conclusivo: o truncamento do corpo mais adiante não esconde nada."""
+    return bool(_FIM_DO_HEAD_RE.search(body[:_META_SCAN_CAP]))
 
 
 def _politicas_via_meta(body: str) -> dict[str, str]:

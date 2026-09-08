@@ -28,6 +28,15 @@ _MAX_WORKERS = 8
 # reais da página. Ainda limitado — o download continua interrompido por streaming.
 _PRIMARY_BODY_CAP = 262_144  # 256 KB
 
+# UA de navegador para a TENTATIVA DE RECUPERAÇÃO. A varredura normal se identifica como
+# Sentinela (transparência); mas quando a coleta primária falha, um bloqueio por UA (servidor
+# que reseta/recusa clientes não-navegador) não é ausência de superfície — vale reperguntar
+# como um navegador antes de declarar o alvo inacessível.
+_UA_NAVEGADOR = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+
 
 def condicoes_de_execucao() -> dict[str, str]:
     """Carimbo das condições da máquina que rodou a varredura.
@@ -220,6 +229,16 @@ def run_scan(
             primary = primary_future.result()
             http_probe = probe_future.result()
 
+        # ALVO_INACESSIVEL por bloqueio/certificado-não-verificável NÃO é ausência de
+        # superfície — é falha de coleta recuperável. Antes de zerar a varredura, tentamos de
+        # novo (UA de navegador; e, se a falha for só de confiança de certificado, uma conexão
+        # permissiva) marcando a proveniência. Ver `_recuperar_primaria`.
+        recuperacao: Finding | None = None
+        if not primary.ok:
+            primary, recuperacao = _recuperar_primaria(client, target, config, primary)
+        if recuperacao is not None:
+            result.add(recuperacao)
+
         if not primary.ok:
             result.errors.append(ScanError("http", f"Falha ao acessar {target.url}: {primary.error}"))
             # Achado explícito: sem a resposta principal, a avaliação fica incompleta. Isso TETA
@@ -288,13 +307,20 @@ def run_scan(
 
 
 def _probe_http(client: HttpClient, target: Target) -> Probe | None:
-    """Requisita a versão HTTP do host (sem redirecionar) p/ avaliar o upgrade a HTTPS.
+    """Requisita a versão HTTP do host SEGUINDO a cadeia p/ avaliar o upgrade a HTTPS.
 
     Para alvo já em ``http://`` numa porta não-padrão, a sonda vai na PORTA DO ALVO.
     Antes ela ia sempre na 80: o veredito de transporte de um app em ``:8080`` era
     decidido por um serviço DIFERENTE na porta 80 do mesmo host (contaminação cruzada).
     Para alvo ``https://``, a sonda continua na 80 de propósito — a pergunta é "a versão
     em texto aberto deste host faz upgrade?", e o texto aberto mora na 80.
+
+    A sonda SEGUE os redirecionamentos (``follow_redirects=True``): o veredito de upgrade
+    é pelo ESQUEMA FINAL da cadeia, não pelo 1º ``Location``. Um servidor que sobe para
+    HTTPS por um salto intermediário RELATIVO (``http:// → /rota → https://…``) faz o
+    upgrade de verdade; ler só o primeiro ``Location`` (que não começa com "https://") o
+    marcava como "não redireciona" — o falso positivo de campo. ``final_url``/``redirect_chain``
+    do Probe carregam onde a cadeia parou, e é o :class:`TransportChecker` que decide.
 
     Quando a sonda FALHA, o Probe de erro é devolvido do mesmo jeito (em vez de ``None``):
     quem consome precisa distinguir "o servidor não redireciona" de "não consegui nem
@@ -304,4 +330,80 @@ def _probe_http(client: HttpClient, target: Target) -> Probe | None:
     """
     porta = f":{target.port}" if target.scheme == "http" and target.port != 80 else ""
     url = f"http://{target.host_for_url}{porta}/"
-    return client.request("GET", url, follow_redirects=False)
+    return client.request("GET", url, follow_redirects=True)
+
+
+def _erro_de_confianca_recuperavel(erro: str | None) -> bool:
+    """A falha primária é SÓ de confiança de certificado (cadeia/CA), sem ser expiração
+    ou hostname divergente? Nesses casos a superfície ainda pode ser lida por uma conexão
+    permissiva — o certificado não confere na loja local, mas os cabeçalhos são do alvo.
+
+    Expiração e hostname-errado ficam de fora de propósito: ali há uma falha de identidade
+    com significado próprio (e o checker de TLS já a lauda), e não queremos ler cabeçalhos
+    de um endpoint cuja identidade está genuinamente quebrada."""
+    if not erro:
+        return False
+    low = erro.lower()
+    if "certificate verify failed" not in low and "certificate_verify_failed" not in low:
+        return False
+    return not any(
+        t in low for t in ("expired", "not valid", "hostname mismatch", "hostname doesn't match")
+    )
+
+
+def _recuperar_primaria(
+    client: HttpClient, target: Target, config: ScanConfig, falha: Probe
+) -> tuple[Probe, Finding | None]:
+    """Tenta recuperar a coleta primária que falhou. Devolve ``(probe, proveniência)``:
+    o probe recuperado (``ok``) com um achado INFO que declara COMO foi obtido, ou o probe
+    de falha original e ``None`` se não deu para recuperar.
+
+    Duas tentativas, na ordem: (1) UA de navegador — cobre bloqueio por UA; (2) conexão
+    permissiva (sem validar certificado) — cobre cadeia/CA não-verificável, marcando que a
+    superfície veio por um canal cujo certificado NÃO foi validado (o checker de TLS emite o
+    achado de confiança à parte). Cert não-verificável ≠ alvo inacessível."""
+    retry = client.request(
+        "GET", target.url, headers={"User-Agent": _UA_NAVEGADOR}, max_body_bytes=_PRIMARY_BODY_CAP
+    )
+    if retry.ok:
+        return retry, _finding_recuperada(
+            "Coleta refeita com User-Agent de navegador após a primeira tentativa falhar.",
+            f"UA de navegador · falha inicial: {falha.error}",
+        )
+    if _erro_de_confianca_recuperavel(falha.error) or _erro_de_confianca_recuperavel(retry.error):
+        try:
+            with HttpClient(
+                timeout=config.timeout, user_agent=_UA_NAVEGADOR, verify_tls=False
+            ) as permissivo:
+                perm = permissivo.get(target.url, max_body_bytes=_PRIMARY_BODY_CAP)
+        except Exception:  # noqa: BLE001 - a recuperação nunca derruba a varredura
+            return falha, None
+        if perm.ok:
+            return perm, _finding_recuperada(
+                "A validação do certificado falhou, mas a conexão foi estabelecida: a "
+                "superfície foi coletada por um canal cujo certificado NÃO foi validado. O "
+                "veredito de confiança do certificado está no checker de TLS deste relatório.",
+                f"TLS não validado · falha inicial: {falha.error}",
+            )
+    return falha, None
+
+
+def _finding_recuperada(descricao: str, evidencia: str) -> Finding:
+    """Proveniência (INFO) de uma coleta primária que só foi obtida após recuperação."""
+    return Finding(
+        id="COLETA_PRIMARIA_RECUPERADA",
+        title="Resposta principal só foi obtida após recuperação da coleta",
+        category=Category.TRANSPORT,
+        severity=Severity.INFO,
+        description=descricao,
+        evidence=evidencia,
+        impact=(
+            "A primeira tentativa de coleta falhou; a superfície abaixo foi avaliada sobre uma "
+            "resposta obtida por um caminho alternativo. O resultado é útil, mas o leitor precisa "
+            "saber que a coleta não foi a padrão — reexecute confirmando o canal se for laudo formal."
+        ),
+        recommendation=(
+            "Confirme por que a coleta padrão falhou (bloqueio por User-Agent na borda, ou cadeia "
+            "de certificado incompleta/não confiável) e corrija na origem."
+        ),
+    )

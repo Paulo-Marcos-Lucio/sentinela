@@ -6,6 +6,7 @@ from conftest import FakeClient, make_context, make_probe, make_target
 from sentinela.checks.exposure import ExposureChecker
 from sentinela.checks.transport import TransportChecker
 from sentinela.core.engine import _probe_http
+from sentinela.core.http import Probe
 from sentinela.core.scoring import compute_score
 
 
@@ -80,6 +81,59 @@ def test_http_com_redirect_https_ok() -> None:
     http_probe = make_probe(status=301, headers={"Location": "https://example.com/"})
     ids = {f.id for f in TransportChecker().run(make_context(http_probe=http_probe))}
     assert "SEM_REDIRECT_HTTPS" not in ids
+
+
+# --------------------------------------------------------------------------- #
+# 8ª classe (achado de campo do Paulo): o veredito de upgrade é pelo ESQUEMA FINAL da
+# cadeia de redirecionamento, não pelo 1º `Location`. Olhar só o primeiro salto marcava
+# como "não redireciona" todo site que sobe para HTTPS por um Location RELATIVO.
+# --------------------------------------------------------------------------- #
+def test_cadeia_http_relativo_ate_https_nao_gera_achado() -> None:
+    # http:// → /entrar (Location relativo) → https://… : a cadeia SOBE para TLS.
+    # O 1º Location não começa com "https://", mas o esquema FINAL é https ⇒ sem achado.
+    http_probe = make_probe(status=200, final_url="https://example.com/entrar")
+    ids = {f.id for f in TransportChecker().run(make_context(http_probe=http_probe))}
+    assert "SEM_REDIRECT_HTTPS" not in ids
+
+
+def test_cadeia_http_para_https_absoluto_nao_gera_achado() -> None:
+    # http:// → https://… (Location absoluto) : upgrade clássico, sem achado.
+    http_probe = make_probe(status=200, final_url="https://example.com/")
+    ids = {f.id for f in TransportChecker().run(make_context(http_probe=http_probe))}
+    assert "SEM_REDIRECT_HTTPS" not in ids
+
+
+def test_cadeia_http_relativo_ate_http_mantem_achado_com_url_final() -> None:
+    # http:// → /home (relativo) → http:// 200 : a cadeia NUNCA chega a HTTPS. O achado
+    # permanece, e a evidência traz a URL FINAL da cadeia (não o 1º salto).
+    http_probe = Probe(
+        url="http://example.com/",
+        status_code=200,
+        headers={},
+        final_url="http://example.com/home",
+        redirect_chain=("http://example.com/", "http://example.com/home"),
+    )
+    achados = [
+        f
+        for f in TransportChecker().run(make_context(http_probe=http_probe))
+        if f.id == "SEM_REDIRECT_HTTPS"
+    ]
+    assert achados, "cadeia que termina em HTTP deve manter SEM_REDIRECT_HTTPS"
+    assert "http://example.com/home" in achados[0].evidence
+
+
+def test_sonda_http_segue_a_cadeia_de_redirecionamento() -> None:
+    # Para enxergar a cadeia inteira (http → Location relativo → https) e decidir pelo
+    # esquema FINAL, a sonda precisa SEGUIR os redirecionamentos.
+    kwargs_vistos: dict[str, object] = {}
+
+    class _Cliente:
+        def request(self, method: str, url: str, **kwargs: object):
+            kwargs_vistos.update(kwargs)
+            return make_probe(status=200, final_url=url)
+
+    _probe_http(_Cliente(), make_target("http://example.com/"))  # type: ignore[arg-type]
+    assert kwargs_vistos.get("follow_redirects") is True
 
 
 def test_transport_sem_http_probe_nao_gera_achado() -> None:

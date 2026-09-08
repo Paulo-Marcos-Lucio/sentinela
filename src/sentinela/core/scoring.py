@@ -69,6 +69,35 @@ _AVISO_TETO_CONCEITO = (
 )
 
 
+# Ordem de severidade do CONCEITO, do melhor (A) para o pior (F). Base para escolher o
+# "pior entre dois" sem espalhar comparações mágicas pelo código.
+_ORDEM_CONCEITO = ("A", "B", "C", "D", "F")
+
+
+def _pior_conceito(a: str, b: str) -> str:
+    """Devolve o PIOR (mais baixo) de dois conceitos — A < B < C < D < F em severidade.
+
+    Aplicar um teto SEMPRE por esta função garante a invariante central: um teto nunca
+    ELEVA um conceito já pior (ex.: teto B sobre um D permanece D). Preserva monotonicidade.
+    """
+    return max(a, b, key=_ORDEM_CONCEITO.index)
+
+
+def _teto_de_cobertura(frac: float) -> str:
+    """Teto de conceito que ESCALA com a fração de checagens executada.
+
+    Uma varredura parcial não certifica higiene plena, e quanto MENOS se olhou, mais baixo
+    o conceito pode chegar — o teto de um degrau (A→B) deixava um alvo com só uma checagem
+    rodada empatar com um quase-completo. As faixas espelham o bom-senso de campo: cobri
+    ≥¾ ⇒ no máximo B; ≥metade ⇒ no máximo C; abaixo disso ⇒ no máximo D (nunca A).
+    """
+    if frac >= 0.75:
+        return "B"
+    if frac >= 0.50:
+        return "C"
+    return "D"
+
+
 def _teto_de_conceito(grade: str, findings: list[Finding]) -> str:
     """Limita o CONCEITO pela pior severidade presente, sem tocar no VALOR.
 
@@ -98,10 +127,12 @@ def compute_score(findings: list[Finding], coverage: Coverage | None = None) -> 
     qualquer achado CRÍTICO reprova em F; qualquer achado ALTO limita o conceito a D.
 
     ``coverage`` (:class:`~sentinela.core.coverage.Coverage`), quando fornecida, aplica um
-    terceiro teto: uma varredura PARCIAL (checagens desligadas pelo operador ou que
-    falharam) não pode emitir conceito A — não se certifica higiene plena sobre o que não
-    se olhou — e o resumo nomeia o que ficou de fora. Sem cobertura, o comportamento é o
-    de antes (retrocompatível com quem chama só com achados)."""
+    terceiro teto que ESCALA com a fração de checagens executada: uma varredura PARCIAL
+    (checagens desligadas pelo operador ou que falharam) não certifica higiene plena sobre
+    o que não se olhou, e quanto menos se olhou mais baixo o conceito pode chegar — cobri
+    ≥¾ teta em B, ≥metade em C, abaixo disso em D (nunca A). O teto nunca ELEVA um conceito
+    já pior nem mexe num F, e o resumo nomeia o que ficou de fora. Sem cobertura, o
+    comportamento é o de antes (retrocompatível com quem chama só com achados)."""
     penalty = sum(f.severity.weight for f in findings)
     value = max(0, 100 - penalty)
     ids = {f.id for f in findings}
@@ -126,11 +157,14 @@ def compute_score(findings: list[Finding], coverage: Coverage | None = None) -> 
     # (um rebaixamento por cobertura NÃO é "limitado por gravidade").
     rebaixou_por_severidade = grade != grade_por_valor
 
-    # Teto de cobertura: varredura parcial não certifica A. Aplicado só quando a nota
-    # não está já tetada em F por outro motivo (não faz sentido "elevar" F para B).
-    cobertura_parcial = coverage is not None and coverage.parcial
-    if cobertura_parcial and grade == "A":
-        grade = "B"
+    # Teto de cobertura: varredura PARCIAL não certifica higiene plena, e o teto ESCALA
+    # com a fração de checagens que de fato rodou (quanto menos se olhou, mais baixo o
+    # conceito pode chegar). Aplicado via `_pior_conceito`, nunca ELEVA um conceito já
+    # pior; e nunca mexe num F (monotonicidade: cobertura parcial não salva um alvo
+    # reprovado por gravidade/inacessibilidade).
+    if coverage is not None and coverage.parcial and grade != "F":
+        frac = len(coverage.executadas) / coverage.base_total if coverage.base_total else 0.0
+        grade = _pior_conceito(grade, _teto_de_cobertura(frac))
 
     if inacessivel:
         summary = (

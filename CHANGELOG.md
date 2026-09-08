@@ -7,6 +7,60 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido — calibração de falsos positivos (auditoria de campo)
+- **Nome de campo "sensível" agora casa por TOKEN inteiro, nunca por substring.** O
+  reconhecedor de credencial/segredo em formulários e query string comparava por trecho
+  solto: `author` disparava por conter `auth`, `wildcard` por `card`, `sessionStorage` por
+  `session`, `tokenized`/`discard` também. O nome passou a ser tokenizado (tira acento,
+  separa `camelCase`, corta em `-_[]`) e comparado token a token — os exemplos acima
+  deixam de disparar, e credencial real (`access_token`, `api_key`) continua pegando.
+- **CPF/CNPJ na URL viraram `DADO_PESSOAL_NA_URL` (LGPD), não credencial.** Eram tratados
+  como segredo de acesso (HIGH). Agora têm achado próprio com o texto de LGPD — vazam
+  privacidade, não acesso — e não sustentam a severidade alta de credencial-na-URL.
+- **Cookie de ANALYTICS/telemetria deixou de ser classificado como sessão de autenticação.**
+  Ids de medição (`kndctr_*_AdobeOrg_*`, `amplitude*`, `*_ml*`, `*visitor*`, `mixpanel`)
+  traziam a sílaba `session`/`identity` e caíam no balde de sessão (MÉDIA + texto de
+  sequestro). Um marcador de fornecedor no nome agora os manda para o balde funcional.
+- **Formulário controlado por handler de framework não é mais acusado de `SENHA_EM_GET`.**
+  A detecção de "form interceptado por JS" só reconhecia `onsubmit=` inline; SPAs de React
+  (`onSubmit`), Vue (`@submit.prevent`/`v-on:submit`) e Angular (`(ngSubmit)`) eram
+  falsamente acusadas de mandar credencial pela URL. Os handlers de framework passaram a
+  contar como interceptação por JS.
+- **Token anti-CSRF `nonce` reconhecido.** O `_wpnonce`/`wpnonce`/`nonce` do WordPress não
+  era visto e um form protegido por nonce recebia `CSRF_TOKEN_AUSENTE`. Adicionado ao
+  reconhecedor de token sincronizador.
+- **Cadeia de certificação incompleta separada de "CA não confiável".** Um servidor que
+  não envia o intermediário (a CA raiz é conhecida, mas o elo do meio falta) era laudado
+  como `CERT_NAO_CONFIAVEL` (ALTA, "certificado feito em casa"). Agora emite o achado
+  dedicado **`CERT_CADEIA_INCOMPLETA`** (o navegador recupera via AIA; clientes estritos
+  recusam) — distinguido pelo código de verificação 20/21, sem tocar a rede.
+
+### Corrigido — falsos negativos
+- **`CSP_AUSENTE` deixa de ser mascarado por corpo truncado quando o `<head>` foi lido
+  inteiro.** Numa página grande, o corpo truncado fazia a checagem se abster
+  (`CSP_NAO_AVALIADA`, INFO) mesmo sem cabeçalho CSP. Como a meta-CSP só vale no `<head>`,
+  se o `</head>` (ou o `<body>`) já apareceu nos bytes lidos, a ausência do cabeçalho é
+  conclusiva e o achado (MÉDIA) volta a sair.
+- **Transporte segue a CADEIA de redirecionamento e decide pelo ESQUEMA FINAL.** O caminho
+  da sonda de porta 80 olhava só o 1º `Location` (`startswith("https://")`): um site que
+  sobe para HTTPS por um salto intermediário RELATIVO (`http:// → /rota → https://…`) era
+  falsamente marcado como "não redireciona" (`SEM_REDIRECT_HTTPS`). A sonda passou a
+  seguir os redirecionamentos e o veredito é pelo esquema final da cadeia; um
+  `http:// → /rota → http:// 200` mantém o achado, agora com a URL final na evidência.
+- **`ALVO_INACESSIVEL` por bloqueio de UA ou certificado não-verificável virou coleta
+  recuperável.** Quando a resposta primária falha, o motor tenta de novo com User-Agent de
+  navegador e — em falha só de confiança de certificado — por conexão permissiva, marcando
+  a proveniência com **`COLETA_PRIMARIA_RECUPERADA`**. Cert não-verificável ≠ alvo
+  inacessível: os cabeçalhos ainda são lidos e laudados.
+
+### Alterado
+- **A nota de higiene ESCALA o teto de conceito com a cobertura da varredura.** Uma
+  varredura parcial (checagens desligadas por `--somente`/`--pular`/`--perfil rapido`, ou
+  que falharam) não certifica higiene plena, e o teto — que antes rebaixava um único degrau
+  (A→B) — agora acompanha a fração executada: cobri ≥¾ das checagens teta em **B**, ≥metade
+  em **C**, abaixo disso em **D** (varredura parcial nunca é **A**). O teto nunca eleva um
+  conceito já pior nem salva um **F**; o resumo continua nomeando o que ficou de fora.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança

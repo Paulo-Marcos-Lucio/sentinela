@@ -178,3 +178,53 @@ def test_redirecionamento_para_rede_interna_falha_alto() -> None:
 
 def test_probe_saudavel_tem_corpo_confiavel() -> None:
     assert make_probe(body="<html></html>").corpo_confiavel is True
+
+
+# =========================================================================== #
+# Classe fn-csp-nao-avaliada-mascara-csp-ausente (auditoria 2026-09-08).
+# INVARIANTE: truncamento só justifica abster se o <head> NÃO foi lido inteiro. Se não há
+# header CSP e o </head> (ou início do <body>) está dentro dos bytes lidos sem meta-CSP,
+# emitir CSP_AUSENTE — a ausência do HEADER é conclusiva; meta-CSP só vale no <head>.
+# =========================================================================== #
+from sentinela.checks.security_headers import _head_lido_por_inteiro  # noqa: E402
+
+
+def test_head_lido_por_inteiro_reconhece_fim_do_head() -> None:
+    assert _head_lido_por_inteiro("<html><head><title>x</title></head><body>")
+    assert _head_lido_por_inteiro("<html><head><meta charset=utf-8><body>")  # <body> fecha o head
+    # truncado no meio do head (sem </head> nem <body>) -> head incompleto
+    assert not _head_lido_por_inteiro("<html><head><title>x</title>" + "<!-- z -->" * 50)
+
+
+def test_pagina_grande_sem_csp_com_head_completo_emite_csp_ausente() -> None:
+    # Corpo TRUNCADO, mas o </head> já foi visto sem meta-CSP: a ausência é conclusiva.
+    corpo = "<!doctype html><html><head><title>t</title></head><body>" + "x" * 5000
+    probe = Probe(
+        url="https://exemplo.com/",
+        status_code=200,
+        headers=_SEM_POLITICA,
+        body_snippet=corpo,
+        final_url="https://exemplo.com/",
+        truncated=True,
+        bytes_lidos=len(corpo),
+    )
+    ids = _headers_ids(probe)
+    assert "CSP_AUSENTE" in ids, "head inteiro sem CSP -> ausência é conclusiva mesmo truncado"
+    assert "CSP_NAO_AVALIADA" not in ids
+
+
+def test_truncado_no_meio_do_head_ainda_se_abstem() -> None:
+    # O lado oposto: se o </head> ficou fora dos bytes lidos, a abstenção continua correta.
+    corpo = "<!doctype html><html><head>" + "<!-- enchimento -->" * 60  # sem </head>/<body>
+    probe = Probe(
+        url="https://exemplo.com/",
+        status_code=200,
+        headers=_SEM_POLITICA,
+        body_snippet=corpo,
+        final_url="https://exemplo.com/",
+        truncated=True,
+        bytes_lidos=len(corpo),
+    )
+    ids = _headers_ids(probe)
+    assert "CSP_NAO_AVALIADA" in ids
+    assert "CSP_AUSENTE" not in ids

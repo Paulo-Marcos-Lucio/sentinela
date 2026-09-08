@@ -15,6 +15,7 @@ sobre a fronteira entre "isto é uma superfície de ataque" e "isto é exploráv
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from html import escape
@@ -25,14 +26,57 @@ from sentinela.core.context import ScanContext
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
-# Nome de campo/param que denuncia credencial ou dado sensível trafegando à mostra.
-_SENSIVEL = re.compile(
-    r"senha|password|passwd|pwd|secret|token|api[_-]?key|apikey|auth|"
-    r"cart(a|ã)o|card|cvv|cpf|cnpj|access[_-]?token|session",
-    re.IGNORECASE,
+# Tokens de NOME de campo que denunciam uma credencial trafegando à mostra. O casamento é
+# por TOKEN INTEIRO do nome (nunca substring solta): 'author' não é 'auth', 'wildcard' não
+# é 'card', 'sessionStorage' não é 'session', 'tokenized'/'discard' não casam. Era a classe
+# de FP em que qualquer nome que CONTIVESSE a sílaba disparava (auditoria 2026-09-08).
+_TOKENS_CREDENCIAL = frozenset(
+    {
+        "senha",
+        "password",
+        "passwd",
+        "pwd",
+        "secret",
+        "token",
+        "auth",
+        "authentication",
+        "apikey",
+        "cartao",  # 'cartão' é normalizado para 'cartao' antes de comparar (ver _tokens_do_nome)
+        "card",
+        "cvv",
+        "cvc",
+    }
 )
-# Campo escondido que caracteriza defesa anti-CSRF (padrão dos frameworks).
-_CSRF = re.compile(r"csrf|xsrf|_token|authenticity_token|__requestverification", re.IGNORECASE)
+# cpf/cnpj NÃO são credencial — são DADO PESSOAL (LGPD). Vazam privacidade, não acesso: têm
+# achado próprio (média, texto de LGPD) e não sustentam um achado de credencial (HIGH).
+_TOKENS_LGPD = frozenset({"cpf", "cnpj"})
+# Campo escondido que caracteriza defesa anti-CSRF (padrão dos frameworks). 'nonce' cobre o
+# token sincronizador do WordPress (_wpnonce/wpnonce/nonce), que a lista antiga não via.
+_CSRF = re.compile(r"csrf|xsrf|_token|authenticity_token|__requestverification|nonce", re.IGNORECASE)
+
+
+def _tokens_do_nome(name: str) -> list[str]:
+    """Quebra o nome do campo em tokens: tira acento, separa camelCase e corta em
+    não-alfanuméricos. `sessionStorage` -> ['session','storage']; `cartão` -> ['cartao'];
+    `access_token` -> ['access','token']; `author` -> ['author']. Tirar o acento antes é o
+    que evita `cartão` virar ['cart','o'] (o 'ã' seria tratado como separador)."""
+    sem_acento = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+    espacado = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", sem_acento)
+    return [t for t in re.split(r"[^a-zA-Z0-9]+", espacado.lower()) if t]
+
+
+def _tem_token_credencial(name: str) -> bool:
+    """O nome carrega um TOKEN de credencial inteiro (não substring). `api_key`/`api-key`
+    contam pelo bigrama api+key, além do token único `apikey`."""
+    tokens = _tokens_do_nome(name)
+    if any(t in _TOKENS_CREDENCIAL for t in tokens):
+        return True
+    return any(a == "api" and b == "key" for a, b in zip(tokens, tokens[1:], strict=False))
+
+
+def _tem_token_lgpd(name: str) -> bool:
+    """O nome é dado pessoal LGPD por token inteiro (cpf/cnpj), nunca por substring."""
+    return any(t in _TOKENS_LGPD for t in _tokens_do_nome(name))
 
 
 @dataclass(slots=True)
@@ -46,13 +90,15 @@ class _Form:
     method: str  # "get" | "post"
     action: str
     metodo_explicito: bool = False
-    tem_onsubmit: bool = False
+    tem_handler_js: bool = False
     tem_controle_submit: bool = False
     campos: list[_Campo] = field(default_factory=list)
 
     @property
     def tem_senha(self) -> bool:
-        return any(c.type == "password" or _SENSIVEL.search(c.name or "") for c in self.campos)
+        """O form carrega uma CREDENCIAL (type=password ou nome com token de credencial).
+        cpf/cnpj são dado pessoal, não credencial — não contam aqui (não sustentam HIGH)."""
+        return any(c.type == "password" or _tem_token_credencial(c.name or "") for c in self.campos)
 
     @property
     def tem_csrf(self) -> bool:
@@ -65,11 +111,13 @@ class _Form:
         GET vale tanto o explícito (`method=get`) quanto o DEFAULT do HTML (sem `method`):
         cegar o default era o buraco C8/H4 — `<form action=/login><input type=password>`
         com um `<button>` submete via GET e vaza a senha na URL. O que NÃO submete pela URL
-        é o form controlado por JS: um `onsubmit=` intercepta e usa fetch/XHR. E, quando o
-        método é só o default (não declarado), exigimos ainda um controle de submit nativo
-        (`<button>`/`<input type=submit>`) como prova de submissão nativa — sem ele, o form
-        é provável SPA e cobrar credencial-em-GET dele seria falso positivo."""
-        if self.method != "get" or self.tem_onsubmit:
+        é o form controlado por JS: um handler intercepta e usa fetch/XHR — e handler não é
+        só o `onsubmit=` inline, é também o de framework (`@submit.prevent` do Vue,
+        `(ngSubmit)` do Angular, `onSubmit` do React). E, quando o método é só o default
+        (não declarado), exigimos ainda um controle de submit nativo (`<button>`/`<input
+        type=submit>`) como prova de submissão nativa — sem ele, o form é provável SPA e
+        cobrar credencial-em-GET dele seria falso positivo."""
+        if self.method != "get" or self.tem_handler_js:
             return False
         return self.metodo_explicito or self.tem_controle_submit
 
@@ -86,8 +134,14 @@ _A_METHOD = re.compile(r"""\bmethod\s*=\s*["']?\s*([a-zA-Z]+)""", re.IGNORECASE)
 _A_ACTION = re.compile(r"""\baction\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_NAME = re.compile(r"""\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_TYPE = re.compile(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
-# `onsubmit=` no <form> = interceptação por JS (submete via fetch/XHR, não pela URL).
-_A_ONSUBMIT = re.compile(r"\bonsubmit\s*=", re.IGNORECASE)
+# Handler de submit que INTERCEPTA o envio por JS (fetch/XHR): o form não submete pela URL.
+# Cobre o inline HTML/React (`onsubmit=`/`onSubmit=`), o Vue (`@submit.prevent`, `v-on:submit`)
+# e o Angular (`(ngSubmit)`). Antes só o `onsubmit=` inline era visto, e todo form de SPA de
+# framework era falsamente acusado de SENHA_EM_GET (classe de FP forms-senha-em-get-spa).
+_A_HANDLER_JS = re.compile(
+    r"\bonsubmit\s*=|@submit(?:\.[\w.-]+)?\s*=|\bv-on:submit(?:\.[\w.-]+)?\s*=|\(ngsubmit\)\s*=",
+    re.IGNORECASE,
+)
 # Controle de submit NATIVO no interior: <button> (default type=submit) que não seja
 # type=button/reset, ou <input type=submit|image>. É a prova de que o form submete de
 # forma nativa (e não é um SPA controlado por JS).
@@ -139,7 +193,7 @@ def _coletar_forms(html: str) -> list[_Form]:
                 method=metodo,
                 action=action,
                 metodo_explicito=bool(metodo_raw),
-                tem_onsubmit=bool(_A_ONSUBMIT.search(cabecalho)),
+                tem_handler_js=bool(_A_HANDLER_JS.search(cabecalho)),
                 tem_controle_submit=tem_controle_submit,
                 campos=campos,
             )
@@ -322,23 +376,54 @@ class FormsChecker(Checker):
 
     # --- dado sensível na URL ---------------------------------------------- #
     def _dado_sensivel_na_url(self, ctx: ScanContext) -> Iterable[Finding]:
+        """Dois achados de naturezas distintas — credencial (acesso) e dado pessoal (LGPD).
+
+        Antes eram um só, e por SUBSTRING: um `?author=` disparava por conter 'auth' e um
+        `?cpf=` era tratado como credencial. Agora o casamento é por token inteiro e a
+        semântica é separada — credencial na URL é grave (vaza acesso), cpf/cnpj é questão
+        de privacidade/LGPD (severidade média), e nenhum nome que só CONTENHA a sílaba casa.
+        """
         params = parse_qsl(urlsplit(ctx.target.url).query, keep_blank_values=True)
-        sensiveis = [nome for nome, _ in params if _SENSIVEL.search(nome)]
-        if sensiveis:
+        credenciais = list(dict.fromkeys(nome for nome, _ in params if _tem_token_credencial(nome)))
+        pessoais = list(dict.fromkeys(nome for nome, _ in params if _tem_token_lgpd(nome)))
+        if credenciais:
             yield Finding(
                 id="DADO_SENSIVEL_NA_URL",
-                title="Dado sensível na query string",
+                title="Credencial na query string",
                 category=self.category,
-                severity=Severity.LOW,
+                severity=Severity.HIGH,
                 description=(
-                    "A URL do alvo carrega parâmetro com nome sensível "
-                    f"(`{'`, `'.join(dict.fromkeys(sensiveis))}`)."
+                    "A URL do alvo carrega parâmetro com nome de credencial "
+                    f"(`{'`, `'.join(credenciais)}`)."
                 ),
-                evidence=f"Parâmetro(s): {', '.join(dict.fromkeys(sensiveis))}",
+                evidence=f"Parâmetro(s): {', '.join(credenciais)}",
                 impact=(
-                    "Valores na query string vazam por log de servidor, histórico, `Referer` e "
-                    "cache — mesmo sob HTTPS. Não é lugar para segredo."
+                    "Credencial na query string vaza por log de servidor, histórico do navegador, "
+                    "cabeçalho `Referer` enviado a terceiros e cache de proxy — mesmo sob HTTPS. "
+                    "Vaza sem que ninguém precise interceptar o tráfego."
                 ),
                 recommendation="Transporte segredo/credencial no corpo da requisição, nunca na URL.",
+                references=(ref.OWASP_INPUT_VALIDATION,),
+            )
+        if pessoais:
+            yield Finding(
+                id="DADO_PESSOAL_NA_URL",
+                title="Dado pessoal (LGPD) na query string",
+                category=self.category,
+                severity=Severity.MEDIUM,
+                description=(
+                    "A URL do alvo carrega parâmetro com dado pessoal identificável "
+                    f"(`{'`, `'.join(pessoais)}`)."
+                ),
+                evidence=f"Parâmetro(s): {', '.join(pessoais)}",
+                impact=(
+                    "CPF/CNPJ na query string ficam registrados em log de servidor, histórico, "
+                    "`Referer` e cache — mesmo sob HTTPS. Sob a LGPD é tratamento de dado pessoal "
+                    "em local inadequado, com risco de exposição a terceiros."
+                ),
+                recommendation=(
+                    "Transporte dado pessoal no corpo da requisição, nunca na URL; minimize a "
+                    "coleta ao necessário (LGPD, princípios de necessidade e segurança)."
+                ),
                 references=(ref.OWASP_INPUT_VALIDATION,),
             )
