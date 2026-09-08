@@ -45,6 +45,16 @@ The architecture makes this simple and isolated:
 We use [Conventional Commits](https://www.conventionalcommits.org/):
 `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`, `ci:`.
 
+## Definition of Done for bug fixes
+
+A bug fix is only done when it attacks the **class** of the problem, not the
+isolated example that showed up in the report: a test that failed against
+the code before the fix, plus an invariant — property-based with Hypothesis
+when the class is a family of inputs — that keeps the whole class from
+coming back. See [`docs/definicao-de-pronto.md`](docs/definicao-de-pronto.md)
+(Portuguese, with real examples from this repository). This standard applies
+to all five tools in the suite, not just Sentinela.
+
 ## Principles
 
 - **Non-intrusive by default.** New active checks are gated behind `--autorizado`.
