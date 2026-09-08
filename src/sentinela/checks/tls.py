@@ -492,6 +492,9 @@ def _accepts_legacy_tls(
     O mesmo alvo saía com achado de severidade média numa máquina e limpo na outra.
     """
 
+    # Rótulo humano → string que `ssl.SSLSocket.version()` devolve para essa versão.
+    _NOME_SSL = {"TLS 1.0": "TLSv1", "TLS 1.1": "TLSv1.1"}
+
     def probe(versao: ssl.TLSVersion, rotulo: str) -> tuple[str | None, str | None]:
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         context.check_hostname = False
@@ -517,8 +520,14 @@ def _accepts_legacy_tls(
         try:
             with (
                 socket.create_connection((host, port), timeout=timeout) as sock,
-                context.wrap_socket(sock, server_hostname=host),
+                context.wrap_socket(sock, server_hostname=host) as ssock,
             ):
+                # Só afirmamos "aceito" se a versão NEGOCIADA for a que forçamos. Alguns
+                # builds de OpenSSL ignoram min/max e negociam uma versão diferente; sem
+                # esta conferência, um handshake que caiu em TLS 1.2 seria creditado como
+                # TLS 1.0 aceito. `version()` é a versão real do protocolo negociado.
+                if ssock.version() != _NOME_SSL.get(rotulo):
+                    return None, None
                 return rotulo, None
         except (OSError, ssl.SSLError) as exc:
             # Sem cifras legadas no cliente, a recusa pode ter sido NOSSA. Só dá para

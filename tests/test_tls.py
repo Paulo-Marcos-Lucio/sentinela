@@ -347,3 +347,48 @@ def test_run_em_https_nao_carimba_subject_de_porta(monkeypatch) -> None:  # type
     ctx = make_context(target=make_target("https://example.com/"))
     expirados = [f for f in mod.TlsChecker().run(ctx) if f.id == "CERT_EXPIRADO"]
     assert expirados and expirados[0].subject is None
+
+
+def test_probe_legado_so_credita_versao_realmente_negociada(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Blindagem descoberta na bateria de campo 2026-09-07: se o OpenSSL ignorar min/max
+    e negociar uma versão diferente da forçada, o handshake bem-sucedido NÃO pode ser
+    creditado como 'TLS 1.0 aceito'. Só a versão realmente negociada conta."""
+    import sentinela.checks.tls as mod
+
+    class _FakeSSock:
+        def __init__(self, versao: str) -> None:
+            self._v = versao
+
+        def __enter__(self):  # type: ignore[no-untyped-def]
+            return self
+
+        def __exit__(self, *a: object) -> None:
+            return None
+
+        def version(self) -> str:
+            return self._v
+
+    class _FakeCtx:
+        def __init__(self, versao_negociada: str) -> None:
+            self._v = versao_negociada
+            self.check_hostname = False
+            self.verify_mode = 0
+            self.minimum_version = None
+            self.maximum_version = None
+
+        def set_ciphers(self, _s: str) -> None:
+            return None
+
+        def wrap_socket(self, _sock: object, server_hostname: str = "") -> _FakeSSock:  # noqa: ARG002
+            return _FakeSSock(self._v)
+
+    # Handshake "sucede", mas negocia TLS 1.2 (não a versão forçada) → não credita.
+    monkeypatch.setattr(mod.socket, "create_connection", lambda *a, **k: _FakeSSock("x"))
+    monkeypatch.setattr(mod.ssl, "SSLContext", lambda *a, **k: _FakeCtx("TLSv1.2"))
+    aceitos, _ = mod._accepts_legacy_tls("host", 443, 2.0)
+    assert aceitos == [], "negociar 1.2 não pode virar 'TLS 1.0 aceito'"
+
+    # Handshake negocia exatamente TLS 1.0 → credita.
+    monkeypatch.setattr(mod.ssl, "SSLContext", lambda *a, **k: _FakeCtx("TLSv1"))
+    aceitos2, _ = mod._accepts_legacy_tls("host", 443, 2.0)
+    assert "TLS 1.0" in aceitos2
