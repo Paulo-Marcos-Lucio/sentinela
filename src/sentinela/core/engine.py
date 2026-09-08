@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from sentinela.checks.base import Checker
 from sentinela.core.config import ScanConfig
 from sentinela.core.context import ScanContext
+from sentinela.core.coverage import compute_coverage
 from sentinela.core.http import HttpClient, Probe
 from sentinela.core.models import Category, Finding, ScanError, ScanResult, Severity, Target
 from sentinela.core.registry import build_checkers
@@ -279,6 +280,9 @@ def run_scan(
                 result.extend(findings)
                 result.checks_run.append(check_id)
 
+    # Cobertura como fonte única: o motor é quem sabe config + o que rodou + o que falhou.
+    # A nota e o relatório leem daqui — nunca recalculam por conta própria.
+    result.coverage = compute_coverage(config, result.checks_run, result.errors)
     result.finished_at = datetime.now(timezone.utc)
     return result
 

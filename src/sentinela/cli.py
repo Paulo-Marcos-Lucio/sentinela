@@ -334,3 +334,13 @@ def _maybe_fail(result: ScanResult, limite: Severity | None, rotulo: str) -> Non
     if any(f.severity >= limite for f in result.findings):
         err_console.print(f"[red]Achados >= {rotulo} encontrados.[/]")
         raise typer.Exit(code=1)
+    # Cobertura parcial não é aprovação. Sem esta trava, `--somente securityheaders
+    # --falhar-em high` fica verde para sempre — o gate certifica um alvo que mal olhou.
+    cobertura = result.coverage
+    if cobertura is not None and getattr(cobertura, "parcial", False):
+        err_console.print(
+            f"[yellow]Cobertura parcial[/] ({len(cobertura.executadas)} de "
+            f"{cobertura.base_total} checagens): não avaliado — {cobertura.resumo_omissoes()}. "
+            "Uma varredura parcial não certifica ausência de problema; o gate não passa limpo."
+        )
+        raise typer.Exit(code=1)

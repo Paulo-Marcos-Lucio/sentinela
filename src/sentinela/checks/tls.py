@@ -13,6 +13,7 @@ import socket
 import ssl
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
@@ -22,7 +23,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from sentinela.checks._util import is_ip, truncate
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
-from sentinela.core.models import Category, Finding, Severity
+from sentinela.core.models import Category, Finding, Severity, Target
+from sentinela.core.target import _DEFAULT_PORTS
 from sentinela.knowledge import references as ref
 
 # Timeout por handshake. Servidor OK responde em <1s; o teto só é atingido em host
@@ -44,7 +46,13 @@ class TlsChecker(Checker):
 
     def run(self, ctx: ScanContext) -> Iterable[Finding]:
         host = ctx.target.host
-        port = ctx.target.port if ctx.target.is_https else 443
+        port = self._porta_tls(ctx.target)
+        if port is None:
+            # Alvo http numa porta NÃO-padrão (ex.: http://host:18080): a 443 é OUTRO
+            # serviço. Medir seu certificado e atribuí-lo ao alvo seria auditar o objeto
+            # errado — a classe do bug que esta guarda fecha. Sem endpoint TLS plausível
+            # para ESTE alvo, a checagem se abstém (o `transport` já cobre "sem HTTPS").
+            return
 
         # As conexões TLS são independentes → em paralelo, evitando um host lento
         # transformar 4×timeout em ~40s (o que travaria uma demo).
@@ -69,26 +77,60 @@ class TlsChecker(Checker):
             return
 
         yield from self._check_relogio(ctx)
-        yield from self._check_expiry(cert)
-        yield from self._check_hostname(cert, host)
-        yield from self._check_key_and_signature(cert)
+        # Todo achado de CERTIFICADO carimba a porta em que o certificado foi observado.
+        # Quando ela difere da porta que o alvo nomeia (http://host na 80 → cert medido na
+        # 443), o laudo precisa dizer o que mediu: um achado que não sabe declarar o
+        # endpoint não pode afirmar sobre o alvo. Mesma porta → sem ruído no subject.
+        endpoint = f"{host}:{port}" if port != ctx.target.port else None
+        for finding in self._check_expiry(cert):
+            yield self._carimbar(finding, endpoint)
+        for finding in self._check_hostname(cert, host):
+            yield self._carimbar(finding, endpoint)
+        for finding in self._check_key_and_signature(cert):
+            yield self._carimbar(finding, endpoint)
         if trust_error is not None:
-            yield Finding(
-                id="CERT_NAO_CONFIAVEL",
-                title="Certificado não confiável",
-                category=self.category,
-                severity=Severity.HIGH,
-                description="A validação padrão do certificado falhou (cadeia não confiável).",
-                evidence=trust_error,
-                impact=(
-                    "Certificados autoassinados ou de cadeia incompleta fazem o "
-                    "navegador alertar o usuário e comprometem a confiança na conexão."
+            yield self._carimbar(
+                Finding(
+                    id="CERT_NAO_CONFIAVEL",
+                    title="Certificado não confiável",
+                    category=self.category,
+                    severity=Severity.HIGH,
+                    description="A validação padrão do certificado falhou (cadeia não confiável).",
+                    evidence=trust_error,
+                    impact=(
+                        "Certificados autoassinados ou de cadeia incompleta fazem o "
+                        "navegador alertar o usuário e comprometem a confiança na conexão."
+                    ),
+                    recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
+                    references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
                 ),
-                recommendation="Use um certificado emitido por uma CA reconhecida e envie a cadeia completa.",
-                references=(ref.OWASP_TLS_CHEATSHEET, ref.MOZILLA_SSL_CONFIG),
+                endpoint,
             )
         yield from self._check_protocols(legados, legados_nao_avaliados)
         yield from self._check_tls_hardening(tls_version, tls_cipher)
+
+    @staticmethod
+    def _porta_tls(target: Target) -> int | None:
+        """Porta onde faz sentido buscar o certificado DESTE alvo — ou ``None``.
+
+        * ``https`` → a própria porta do alvo (a 8443 de ``https://host:8443`` é o alvo).
+        * ``http`` na porta padrão (80) → 443 é o par canônico do host: a pergunta
+          legítima "existe HTTPS neste host e o certificado está são?".
+        * ``http`` numa porta NÃO-padrão → 443 é um serviço DIFERENTE; devolve ``None``
+          para não atribuir ao alvo um certificado que não é dele.
+        """
+        if target.is_https:
+            return target.port
+        if target.port == _DEFAULT_PORTS["http"]:
+            return 443
+        return None
+
+    @staticmethod
+    def _carimbar(finding: Finding, endpoint: str | None) -> Finding:
+        """Marca em qual endpoint o certificado foi observado, quando não é a porta do alvo."""
+        if endpoint is None or finding.subject is not None:
+            return finding
+        return replace(finding, subject=endpoint)
 
     def _check_relogio(self, ctx: ScanContext) -> Iterable[Finding]:
         """Compara o relógio local com o do alvo, porque a validade do certificado é

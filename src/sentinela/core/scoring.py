@@ -81,7 +81,7 @@ def _teto_de_conceito(grade: str, findings: list[Finding]) -> str:
     return grade
 
 
-def compute_score(findings: list[Finding]) -> Score:
+def compute_score(findings: list[Finding], coverage: object | None = None) -> Score:
     """Calcula a nota subtraindo de 100 os pesos de cada achado.
 
     Achados informativos não penalizam. O piso é 0. O cálculo é intencionalmente
@@ -92,7 +92,12 @@ def compute_score(findings: list[Finding]) -> Score:
 
     Além disso, o CONCEITO (só ele, nunca o valor) é limitado pela pior severidade:
     qualquer achado CRÍTICO reprova em F; qualquer achado ALTO limita o conceito a D.
-    """
+
+    ``coverage`` (:class:`~sentinela.core.coverage.Coverage`), quando fornecida, aplica um
+    terceiro teto: uma varredura PARCIAL (checagens desligadas pelo operador ou que
+    falharam) não pode emitir conceito A — não se certifica higiene plena sobre o que não
+    se olhou — e o resumo nomeia o que ficou de fora. Sem cobertura, o comportamento é o
+    de antes (retrocompatível com quem chama só com achados)."""
     penalty = sum(f.severity.weight for f in findings)
     value = max(0, 100 - penalty)
     ids = {f.id for f in findings}
@@ -112,7 +117,16 @@ def compute_score(findings: list[Finding]) -> Score:
     else:
         grade = _grade_for(value)
     grade_por_valor = grade
-    grade = _teto_de_conceito(grade, findings)
+    grade = _teto_de_conceito(grade_por_valor, findings)
+    # Cada teto tem sua própria explicação: misturá-las faz o laudo dar a razão errada
+    # (um rebaixamento por cobertura NÃO é "limitado por gravidade").
+    rebaixou_por_severidade = grade != grade_por_valor
+
+    # Teto de cobertura: varredura parcial não certifica A. Aplicado só quando a nota
+    # não está já tetada em F por outro motivo (não faz sentido "elevar" F para B).
+    cobertura_parcial = bool(coverage is not None and getattr(coverage, "parcial", False))
+    if cobertura_parcial and grade == "A":
+        grade = "B"
 
     if inacessivel:
         summary = (
@@ -147,10 +161,20 @@ def compute_score(findings: list[Finding]) -> Score:
 
     actionable = [f for f in findings if f.severity is not Severity.INFO]
     if not actionable:
-        summary = (
-            "Nenhum problema acionável identificado pelas checagens não-intrusivas. "
-            "Higiene de segurança sólida na superfície analisada."
-        )
+        # A frase de "higiene sólida" só vale se a cobertura FOI plena — do contrário
+        # afirma sobre o que não se olhou. Com cobertura parcial, o resumo é honesto.
+        if cobertura_parcial:
+            summary = (
+                "Nenhum problema acionável NA PARTE AVALIADA — mas a varredura foi parcial "
+                f"({len(coverage.executadas)} de {coverage.base_total} checagens). "
+                f"Não avaliado: {coverage.resumo_omissoes()}. Ausência de achado aqui não é "
+                "prova de ausência de problema no que ficou de fora."
+            )
+        else:
+            summary = (
+                "Nenhum problema acionável identificado pelas checagens não-intrusivas. "
+                "Higiene de segurança sólida na superfície analisada."
+            )
     else:
         criticos = sum(1 for f in findings if f.severity is Severity.CRITICAL)
         altos = sum(1 for f in findings if f.severity is Severity.HIGH)
@@ -167,7 +191,14 @@ def compute_score(findings: list[Finding]) -> Score:
                 "Sem achados críticos ou altos; há oportunidades de endurecimento "
                 "(hardening) de severidade média/baixa."
             )
-    if grade != grade_por_valor:
+    if rebaixou_por_severidade and actionable:
         summary += _AVISO_TETO_CONCEITO
+    # Quando há achado acionável E cobertura parcial, a lacuna precisa aparecer também
+    # (o ramo "sem acionável" acima já a nomeia por conta própria).
+    if cobertura_parcial and actionable:
+        summary += (
+            f" Cobertura parcial: {len(coverage.executadas)} de {coverage.base_total} "
+            f"checagens; não avaliado: {coverage.resumo_omissoes()}."
+        )
 
     return Score(value=value, grade=grade, summary=summary)

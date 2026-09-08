@@ -15,7 +15,7 @@ SEVERITY_ORDER: tuple[Severity, ...] = (
 
 
 def score_of(result: ScanResult) -> Score:
-    return compute_score(result.findings)
+    return compute_score(result.findings, result.coverage)
 
 
 def ordered_counts(result: ScanResult) -> list[tuple[Severity, int]]:

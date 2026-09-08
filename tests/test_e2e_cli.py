@@ -93,9 +93,23 @@ def test_e2e_falhar_em_nenhum_nao_derruba_o_build() -> None:
 
 
 def test_e2e_falhar_em_aceita_vocabulario_em_ingles() -> None:
-    # A mesma linha de CI tem que funcionar nos dois idiomas.
-    assert _scan("--fail-on", "medium").exit_code == 1
-    assert _scan("--fail-on", "critical").exit_code == 0
+    # A mesma linha de CI tem que funcionar nos dois idiomas: --fail-on == --falhar-em.
+    assert _scan("--fail-on", "medium").exit_code == _scan("--falhar-em", "medium").exit_code == 1
+    # `critical` é vocabulário ACEITO (não é erro de uso 2) e os dois idiomas concordam.
+    # O exit aqui é 1 por COBERTURA PARCIAL (--somente), não por erro de uso — ver o teste
+    # dedicado abaixo. O que este teste garante é a paridade EN/PT, não o valor.
+    en = _scan("--fail-on", "critical").exit_code
+    pt = _scan("--falhar-em", "critical").exit_code
+    assert en == pt and en != 2
+
+
+def test_cobertura_parcial_nao_passa_verde_no_gate() -> None:
+    # O buraco do achado 1.2: `--somente X --fail-on critical` sem crítico ficava verde
+    # para sempre, certificando um alvo que mal foi olhado. Agora o gate reprova.
+    resultado = _scan("--fail-on", "critical")
+    assert resultado.exit_code == 1
+    saida = resultado.stdout + (getattr(resultado, "stderr", "") or "")
+    assert "parcial" in saida.lower()
 
 
 def test_falhar_em_desconhecido_e_erro_de_uso() -> None:

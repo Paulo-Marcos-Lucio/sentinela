@@ -271,3 +271,79 @@ def test_um_unico_handshake_entrega_certificado_versao_e_cifra(monkeypatch) -> N
         "TLS_AES_256_GCM_SHA384",
     )
     assert conexoes == [("exemplo.com", 443)]  # UMA conexão, não duas
+
+
+# --------------------------------------------------------------------------- #
+# Porta TLS: um certificado só pode ser atribuído ao alvo que o serve.
+# Classe do bug (auditoria 2026-09-07): alvo `http://host:PORTA` media a 443 —
+# um serviço DIFERENTE — e podia tetar a nota em F com o certificado alheio.
+# --------------------------------------------------------------------------- #
+def test_porta_tls_https_usa_a_porta_do_alvo() -> None:
+    from conftest import make_target
+
+    assert TlsChecker._porta_tls(make_target("https://host:8443/")) == 8443
+
+
+def test_porta_tls_http_padrao_mede_o_par_canonico_443() -> None:
+    from conftest import make_target
+
+    assert TlsChecker._porta_tls(make_target("http://host/")) == 443
+
+
+def test_porta_tls_http_em_porta_nao_padrao_nao_mede_443() -> None:
+    # O núcleo do achado: 443 seria OUTRO serviço; a checagem tem de se abster.
+    from conftest import make_target
+
+    assert TlsChecker._porta_tls(make_target("http://host:18080/")) is None
+
+
+def test_run_em_http_porta_nao_padrao_nao_emite_achado_de_cert(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Prova de ponta: mesmo com um certificado EXPIRADO servido na 443, um alvo
+    # http://host:18080 não recebe achado nenhum — o cert não é dele.
+    import sentinela.checks.tls as mod
+    from conftest import make_context, make_target
+
+    now = datetime.now(timezone.utc)
+    cert = _cert("host", not_before=now - timedelta(days=400), not_after=now - timedelta(days=10))
+    monkeypatch.setattr(
+        mod, "_fetch_certificate", lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.2", "AES128-GCM-SHA256")
+    )
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: "self signed certificate")
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
+    ctx = make_context(target=make_target("http://host:18080/"))
+    assert list(mod.TlsChecker().run(ctx)) == []
+
+
+def test_run_em_http_padrao_carimba_o_endpoint_medido_no_subject(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Ao medir a 443 de um alvo http (porta 80), o achado precisa DECLARAR que
+    # observou host:443 — não pode afirmar sobre o alvo sem dizer o que mediu.
+    import sentinela.checks.tls as mod
+    from conftest import make_context, make_target
+
+    now = datetime.now(timezone.utc)
+    cert = _cert("host", not_before=now - timedelta(days=400), not_after=now - timedelta(days=10))
+    monkeypatch.setattr(
+        mod, "_fetch_certificate", lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.3", "AES128-GCM-SHA256")
+    )
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
+    ctx = make_context(target=make_target("http://host/"))
+    expirados = [f for f in mod.TlsChecker().run(ctx) if f.id == "CERT_EXPIRADO"]
+    assert expirados and expirados[0].subject == "host:443"
+
+
+def test_run_em_https_nao_carimba_subject_de_porta(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    # Mesma porta do alvo → nada de ruído no subject.
+    import sentinela.checks.tls as mod
+    from conftest import make_context, make_target
+
+    now = datetime.now(timezone.utc)
+    cert = _cert("example.com", not_before=now - timedelta(days=400), not_after=now - timedelta(days=10))
+    monkeypatch.setattr(
+        mod, "_fetch_certificate", lambda *a, **k: (cert.public_bytes(_DER), "TLSv1.3", "AES128-GCM-SHA256")
+    )
+    monkeypatch.setattr(mod, "_trust_error", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "_accepts_legacy_tls", lambda *a, **k: ([], []))
+    ctx = make_context(target=make_target("https://example.com/"))
+    expirados = [f for f in mod.TlsChecker().run(ctx) if f.id == "CERT_EXPIRADO"]
+    assert expirados and expirados[0].subject is None

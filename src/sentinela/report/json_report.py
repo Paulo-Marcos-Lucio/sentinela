@@ -48,6 +48,9 @@ def render_json(result: ScanResult) -> str:
         "finished_at": result.finished_at.isoformat() if result.finished_at else None,
         "duration_seconds": round(result.duration_seconds, 2),
         "checks_run": result.checks_run,
+        # Cobertura: o consumidor de CI/dashboard precisa distinguir "limpo" de "não
+        # olhado". `partial=true` significa que a nota fala só do que foi avaliado.
+        "coverage": _coverage_dict(result.coverage),
         "summary": {
             "total": len(result.findings),
             "by_severity": {sev.name.lower(): counts[sev] for sev in SEVERITY_ORDER},
@@ -59,6 +62,21 @@ def render_json(result: ScanResult) -> str:
     # `artifact_sha256` entra por último e é calculado sobre o documento SEM ele — a
     # receita de verificação está no docstring de `serializar_com_selo`.
     return serializar_com_selo(payload)
+
+
+def _coverage_dict(coverage: object | None) -> dict[str, object] | None:
+    if coverage is None:
+        return None
+    return {
+        "partial": coverage.parcial,
+        "ran": list(coverage.executadas),
+        "base_total": coverage.base_total,
+        # Omitidas por escolha do operador ou por falha REDUZEM a cobertura base.
+        "omitted_by_operator": list(coverage.por_operador),
+        "omitted_by_error": list(coverage.por_erro),
+        # Intrusivas puladas por o modo ser não-intrusivo: declaradas, não contam como lacuna.
+        "omitted_by_mode": list(coverage.por_modo),
+    }
 
 
 def _finding_dict(finding: Finding) -> dict[str, object]:
