@@ -7,6 +7,15 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Adicionado
+- **`taxonomy/owasp-2025.yaml` + `taxonomy/mappings.yaml`: fonte declarativa da
+  classificação OWASP/CWE.** Até aqui o mapeamento achado → OWASP Top 10:2025/CWE só
+  existia dentro de `knowledge/mapping.py` (`_TAGS`, privado ao pacote Python) — sem
+  lugar para um consumidor externo ler a taxonomia sem importar o módulo. Os dois
+  arquivos espelham `_TAGS`/`OWASP_TOP10_2025` e `tests/test_taxonomy.py` falha se
+  qualquer um dos lados divergir do outro (achado novo sem entrada, entrada órfã,
+  classificação diferente). `PyYAML` entra só como dependência de teste.
+
 ## [0.5.0] — 2026-08-14
 
 ### Segurança

@@ -65,6 +65,9 @@ dev = [
   "hypothesis>=6.100",
   "pytest>=9.1",
   "pytest-cov>=7.1",
+  # Só para ler taxonomy/*.yaml em tests/test_taxonomy.py — mapping.py não importa
+  # PyYAML, então isto não é dependência de runtime do pacote.
+  "PyYAML>=6.0.3",
 ]
 
 [project.urls]
