@@ -39,7 +39,9 @@ class HttpMethodsChecker(Checker):
             # TRACE/PUT estão desabilitados. Sondamos TRACE (leitura pura — ecoa a
             # requisição, não altera estado) para pegar o XST real, e declaramos que o
             # inventário por OPTIONS ficou inconclusivo em vez de calar.
-            yield from self._sondar_trace(ctx)
+            trace = self._sondar_trace(ctx)
+            if trace is not None:
+                yield trace
             yield Finding(
                 id="METODOS_NAO_AVALIADOS",
                 title="Métodos HTTP não puderam ser inventariados (OPTIONS sem Allow)",
@@ -66,21 +68,35 @@ class HttpMethodsChecker(Checker):
         metodos = {m.strip().upper() for m in allow.split(",") if m.strip()}
 
         if "TRACE" in metodos:
-            yield Finding(
-                id="HTTP_TRACE_HABILITADO",
-                title="Método TRACE habilitado",
-                category=self.category,
-                severity=Severity.MEDIUM,
-                description="O servidor anuncia suporte ao método `TRACE`.",
-                evidence=f"Allow: {allow}",
-                impact=(
-                    "TRACE ecoa a requisição recebida e pode ser abusado em ataques "
-                    "de Cross-Site Tracing (XST) para exfiltrar cabeçalhos sensíveis "
-                    "como cookies, mesmo protegidos por HttpOnly."
-                ),
-                recommendation="Desabilite o método TRACE no servidor/proxy.",
-                references=(ref.RFC_TRACE, ref.OWASP_SECURE_HEADERS),
-            )
+            # Anunciar não é confirmar. O ramo SEM `Allow` já exigia eco real (H8 da cruzada
+            # 2026-08-30); este ramo continuava afirmando "habilitado" a partir do cabeçalho,
+            # sem enviar um TRACE — a MESMA classe, no ramo que a cruzada não tocou. Agora os
+            # dois passam pela mesma sonda: só o eco real emite HTTP_TRACE_HABILITADO.
+            trace = self._sondar_trace(ctx)
+            if trace is not None:
+                yield trace
+            else:
+                yield Finding(
+                    id="METODOS_ANUNCIADOS",
+                    title="TRACE anunciado via OPTIONS, não confirmado por sondagem",
+                    category=self.category,
+                    severity=Severity.INFO,
+                    description=(
+                        "O `Allow` lista `TRACE`, mas a sonda ativa não obteve eco da requisição. "
+                        "Anunciar um método não é o mesmo que tê-lo habilitado — proxies e "
+                        "frameworks frequentemente listam TRACE no `Allow` e o recusam na prática."
+                    ),
+                    evidence=f"Allow: {allow} · sonda TRACE sem eco",
+                    impact=(
+                        "Tratar o anúncio como confirmação superestimaria a superfície: o laudo "
+                        "afirmaria um XST que a sondagem não reproduziu."
+                    ),
+                    recommendation=(
+                        "Se a política proíbe TRACE, remova-o também do `Allow` para evitar ruído; "
+                        "a ausência de eco indica que o método não está, de fato, servindo."
+                    ),
+                    references=(ref.RFC_TRACE, ref.OWASP_SECURE_HEADERS),
+                )
 
         expostos = sorted(metodos & _PERIGOSOS)
         if expostos:
@@ -103,12 +119,15 @@ class HttpMethodsChecker(Checker):
                 references=(ref.OWASP_TOP10,),
             )
 
-    def _sondar_trace(self, ctx: ScanContext) -> Iterable[Finding]:
-        """Sonda TRACE (idempotente, read-only) para detectar Cross-Site Tracing real quando
-        o OPTIONS não anuncia métodos. Um TRACE habilitado responde 200 ecoando a requisição."""
+    def _sondar_trace(self, ctx: ScanContext) -> Finding | None:
+        """Sonda TRACE (idempotente, read-only) e devolve o achado SÓ com eco real.
+
+        Fonte única da confirmação de TRACE: os dois ramos do `run` (com e sem `Allow`)
+        passam por aqui, para que "habilitado" nunca seja afirmado sem execução observada.
+        Um TRACE habilitado responde 200 ecoando a requisição."""
         probe = ctx.client.request("TRACE", ctx.target.url)
         if not probe.ok or probe.status_code != 200:
-            return
+            return None
         corpo = (probe.body_snippet or "").upper()
         ctype = (probe.header("Content-Type") or "").lower()
         # Eco REAL de TRACE: ou o Content-Type é `message/http`, ou o corpo reflete a LINHA
@@ -120,8 +139,8 @@ class HttpMethodsChecker(Checker):
         linha_requisicao = f"TRACE {caminho} HTTP/".upper()
         eco = "message/http" in ctype or linha_requisicao in corpo
         if not eco:
-            return
-        yield Finding(
+            return None
+        return Finding(
             id="HTTP_TRACE_HABILITADO",
             title="Método TRACE habilitado",
             category=self.category,

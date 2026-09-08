@@ -368,6 +368,9 @@ _PLAIN: dict[str, str] = {
         "de avaliar — não é um veredito de que está tudo bem."
     ),
     # --- Higiene / processo ---
+    "METODOS_ANUNCIADOS": (
+        "O servidor LISTA um método sensível (TRACE) no cabeçalho de métodos, mas quando a ferramenta o testou de verdade ele não respondeu. Anunciar não é ter habilitado — ficou o registro, sem alarme falso."
+    ),
     "SECURITY_TXT_AUSENTE": (
         "Falta um canal-padrão de contato de segurança (o security.txt) — o lugar onde um "
         "pesquisador ético avisaria se encontrasse uma falha. Sem ele, o aviso pode nunca chegar."

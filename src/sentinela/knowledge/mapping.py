@@ -148,6 +148,7 @@ _TAGS: dict[str, Tag] = {
     "ALVO_INACESSIVEL": Tag(None, None, None),
     # Higiene / processo (sem OWASP direto)
     "SECURITY_TXT_AUSENTE": Tag(None, None, None),
+    "METODOS_ANUNCIADOS": Tag(None, None, None),
     # Superfície de formulários e injeção (checker passivo `forms`)
     "SENHA_EM_GET": Tag(A07, "CWE-598", "Use of GET Request Method With Sensitive Query Strings"),
     "FORMULARIO_CREDENCIAL_SEM_HTTPS": Tag(
