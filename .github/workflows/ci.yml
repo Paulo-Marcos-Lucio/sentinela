@@ -46,6 +46,10 @@ jobs:
       # O portão de cobertura (--cov-fail-under) vem do pyproject.toml: o CI e o
       # `make test` rodam literalmente o mesmo comando.
       - run: pytest
+      # Portão "badge gerado, não digitado": a contagem de testes exibida na vitrine
+      # (README + SVG do badge) tem de bater com `pytest --collect-only`. Sem ele o número
+      # vira literal digitado à mão que envelhece em silêncio (auditoria cruzada, classe C).
+      - run: python scripts/check_test_count.py
 
   autoauditoria:
     # Dogfood: a Sentinela roda contra um alvo local para provar, a cada push, que o

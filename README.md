@@ -17,7 +17,7 @@
 [![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
-[![351 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-qualidade-de-engenharia--método)
+[![472 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-qualidade-de-engenharia--método)
 [![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-qualidade-de-engenharia--método)
 
 </div>
@@ -210,7 +210,7 @@ O que está aqui é a **vitrine**: o diagnóstico **não-intrusivo**, aberto e d
 | **Sondagem** | Só a superfície que o alvo já expõe (`robots.txt`, cabeçalhos, TLS…) | Dezenas de **rotas e artefatos sensíveis** + detecção de **modo debug / erro verboso**, provocando o servidor com segurança (read-only) |
 | **O que muda** | você lê a **fachada** | **código a mais**: o motor ativo de confirmação, que **não existe** na edição pública |
 
-**Sendo direto:** nesta ferramenta o Pro é **código a mais**, não só serviço — o motor ativo de confirmação de injeção não existe na edição pública, que fica na leitura passiva de propósito. (No resto da suíte AppSec a engine pública é a mesma; lá o Pro é **serviço** — consultoria, PoC autorizado, reteste conduzido.) E essa camada ativa é **gated**: só roda com `--autorizado` e escopo por escrito, porque envia tráfego que o dono do sistema vai ver e registrar. Não explora, não extrai dado, não persiste nada: só transforma "isto é uma superfície" em "isto confirma".
+**Sendo direto:** nesta ferramenta o Pro é **código a mais**, não só serviço — o motor ativo de confirmação de injeção não existe na edição pública, que fica na leitura passiva de propósito. (Cada ferramenta da suíte tem a sua própria edição Pro; o que o código acrescenta muda de ferramenta para ferramenta — e em todas o Pro também vem com **serviço**: consultoria, PoC autorizado, reteste conduzido.) E essa camada ativa é **gated**: só roda com `--autorizado` e escopo por escrito, porque envia tráfego que o dono do sistema vai ver e registrar. Não explora, não extrai dado, não persiste nada: só transforma "isto é uma superfície" em "isto confirma".
 
 É a diferença entre ler a fachada e **enxergar por dentro da superfície** — sempre sob autorização e escopo.
 
@@ -267,7 +267,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ## 🔬 Qualidade de engenharia & método
 
-**Portões, medidos agora (não aspiração):** 351 testes (incluindo property-based com Hypothesis) · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 42 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+**Portões, medidos agora (não aspiração):** 472 testes (incluindo property-based com Hypothesis) · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 44 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
 
 **Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
 

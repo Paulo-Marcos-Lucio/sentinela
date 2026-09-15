@@ -110,7 +110,7 @@ def serializar_com_selo(payload: dict[str, object]) -> str:
         doc = json.load(open("laudo.json", encoding="utf-8"))
         selo = doc.pop("artifact_sha256")
         calc = hashlib.sha256(
-            json.dumps(doc, ensure_ascii=False, indent=2).encode("utf-8")
+            json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         assert calc == selo
 
@@ -123,5 +123,15 @@ def serializar_com_selo(payload: dict[str, object]) -> str:
 
 
 def _dumps(payload: dict[str, object]) -> str:
-    """Serialização canônica — as MESMAS opções nas duas passadas, senão o selo não fecha."""
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    """Serialização canônica — as MESMAS opções nas duas passadas, senão o selo não fecha.
+
+    Compacto e ORDENADO (``sort_keys=True``, ``separators=(",", ":")``): é a receita comum às
+    quatro ferramentas da suíte, para que um cliente confira o selo dos quatro laudos com UM
+    único procedimento. Ordenar as chaves também desatrela o hash da ordem de inserção do
+    dicionário — dois laudos do mesmo alvo não divergem por reordenação acidental.
+
+    NOTA DE RECEITA (mudança 2026-09-15): antes desta versão o selo usava ``indent=2`` sem
+    ``sort_keys``; um laudo selado por uma versão anterior fecha pela receita antiga, e um
+    novo, por esta. A troca uniformizou a Sentinela com o resto da suíte.
+    """
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))

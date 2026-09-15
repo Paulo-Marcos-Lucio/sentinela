@@ -48,14 +48,20 @@ def test_envelope_carrega_commit_ruleset_hash_e_artifact_sha256(monkeypatch: pyt
     data = json.loads(bruto)
 
     assert data["commit"] == "a" * 40
+    # Discriminador de proveniência: o `commit` da Sentinela é o da FERRAMENTA, e o envelope
+    # tem de dizê-lo (uniformidade de suíte — ver `commit_scope`).
+    assert data["commit_scope"] == "tool"
     assert _SHA256.match(data["ruleset_hash"].removeprefix("sha256:"))
+    # `ruleset_hash` é auto-descritivo (`sha256:<hex>`) — o prefixo faz parte do contrato.
+    assert data["ruleset_hash"].startswith("sha256:")
     assert _SHA256.match(data["artifact_sha256"])
 
     # A receita de verificação PUBLICADA tem que fechar: remova o campo do documento e
-    # reserialize com as mesmas opções. Sem isto o selo seria decorativo.
+    # reserialize com as MESMAS opções (compacto-ordenado, comum à suíte). Sem isto o selo
+    # seria decorativo.
     sem_selo = {k: v for k, v in data.items() if k != "artifact_sha256"}
     recalculado = hashlib.sha256(
-        json.dumps(sem_selo, ensure_ascii=False, indent=2).encode("utf-8")
+        json.dumps(sem_selo, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
     assert recalculado == data["artifact_sha256"]
 
@@ -88,7 +94,9 @@ def test_artifact_sha256_denuncia_adulteracao(monkeypatch: pytest.MonkeyPatch) -
     data = json.loads(render_json(_amostra()))
     selo = data.pop("artifact_sha256")
     data["summary"]["total"] = 0  # alguém "sumiu" com o achado no arquivo entregue
-    adulterado = hashlib.sha256(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")).hexdigest()
+    adulterado = hashlib.sha256(
+        json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
     assert adulterado != selo
 
 

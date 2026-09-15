@@ -37,6 +37,11 @@ def render_json(result: ScanResult) -> str:
         # `ruleset_hash` diz QUAL catálogo; sem os dois, um reteste não distingue alvo
         # corrigido de regra alterada.
         "commit": descobrir_commit(),
+        # Discriminador do que `commit` identifica: na Sentinela é o commit da FERRAMENTA
+        # (o código que rodou), não o do alvo. Uniforme na suíte — outras tools carimbam
+        # `commit_scope: "target"` quando o SHA é o do repositório auditado. Sem este campo
+        # o mesmo nome `commit` teria dois sentidos entre as ferramentas.
+        "commit_scope": "tool",
         "ruleset_hash": hash_do_catalogo(),
         "owasp_edition": OWASP_EDICAO,
         "target": {

@@ -19,7 +19,7 @@
 [![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
-[![351 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
+[![472 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
 [![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-engineering-quality--method)
 
 </div>
@@ -211,7 +211,7 @@ What's here is the **showcase**: the **non-intrusive**, open, defensive diagnost
 | **Probing** | Only the surface the target already exposes (`robots.txt`, headers, TLS…) | Dozens of **sensitive routes and artifacts** + detection of **debug mode / verbose errors**, safely probing the server (read-only) |
 | **What changes** | you read the **facade** | **more code**: the active confirmation engine, which **does not exist** in the public edition |
 
-**To be direct:** in this tool, Pro is **more code**, not just a service — the active injection-confirmation engine does not exist in the public edition, which stays on passive reading by design. (In the rest of the AppSec suite, the public engine is the same one; there, Pro is a **service** — consulting, authorized PoC, guided retesting.) And this active layer is **gated**: it only runs with `--autorizado` and written scope, because it sends traffic that the system's owner will see and log. It doesn't exploit, doesn't extract data, doesn't persist anything: it only turns "this is a surface" into "this confirms it."
+**To be direct:** in this tool, Pro is **more code**, not just a service — the active injection-confirmation engine does not exist in the public edition, which stays on passive reading by design. (Each tool in the suite has its own Pro edition; what the code adds varies from tool to tool — and in all of them Pro also comes with a **service**: consulting, authorized PoC, guided retesting.) And this active layer is **gated**: it only runs with `--autorizado` and written scope, because it sends traffic that the system's owner will see and log. It doesn't exploit, doesn't extract data, doesn't persist anything: it only turns "this is a surface" into "this confirms it."
 
 It's the difference between reading the facade and **seeing beneath the surface** — always under authorization and scope.
 
@@ -268,7 +268,7 @@ Checks **never** talk to the network directly: they receive an immutable `Probe`
 
 ## 🔬 Engineering quality & method
 
-**Gates, measured right now (not aspiration):** 351 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 42 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
+**Gates, measured right now (not aspiration):** 472 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 44 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
 
 **Tests that don't accept a facade.** Beyond the happy path, the suite has invariant and timed tests that go red if detection is undone or degraded. Real examples from the repo: `test_corpo_hostil_nao_trava_a_varredura` times form extraction against a 256 KB hostile body and **fails if it exceeds 1 s** — locking the DoS regression down by SHA (the stdlib's `HTMLParser` took >120 s); and `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` proves the property that adding a finding **never** improves the score — accidentally recalibrating the curve turns it red.
 
