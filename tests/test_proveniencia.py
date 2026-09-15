@@ -149,3 +149,24 @@ def test_ruleset_hash_muda_quando_o_peso_de_uma_severidade_muda(monkeypatch: pyt
     monkeypatch.setitem(models._SEVERITY_WEIGHTS, Severity.HIGH, 21)
     depois = hash_do_catalogo()
     assert antes != depois
+
+
+def test_schema_version_do_catalogo_e_canonico_da_suite() -> None:
+    """Trava a MUDANÇA DE RECEITA de 2026-09-15 (auditoria cruzada Pro, classe D/F): o
+    discriminador de schema do catálogo segue o padrão canônico ``<tool>-ruleset/<n>`` da
+    suíte (hífen), não a forma antiga ``sentinela/ruleset/1`` (barra) que divergia dos outros
+    três. Sem esta invariante, um refactor futuro poderia voltar à barra e reabrir a
+    incompatibilidade de receita entre as ferramentas sem ficar vermelho.
+
+    Prova a CLASSE, não o exemplo: qualquer formato que não seja ``sentinela-ruleset/<n>``
+    (um único hífen entre a tool e ``ruleset``, versão numérica, sem barra antes de ``ruleset``)
+    reprova — inclusive a forma antiga.
+    """
+    from sentinela.core.proveniencia import _RULESET_FORMATO
+
+    assert _RULESET_FORMATO == "sentinela-ruleset/1"
+    # A forma antiga (barra) nunca mais volta: `sentinela/ruleset/...` reprova.
+    assert not _RULESET_FORMATO.startswith("sentinela/ruleset")
+    assert re.match(r"^sentinela-ruleset/\d+$", _RULESET_FORMATO)
+    # E o discriminador é de fato o que ancora o documento hasheado (1ª linha do catálogo).
+    assert hash_do_catalogo().startswith("sha256:")

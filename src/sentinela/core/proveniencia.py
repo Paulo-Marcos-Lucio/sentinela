@@ -42,7 +42,13 @@ _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 # Formato do documento canônico do catálogo. Versionado porque mudar a MONTAGEM do texto
 # muda todos os hashes sem mudar uma vírgula das regras — quem comparar dois laudos com
 # prefixos de versão diferentes tem de saber que a comparação não vale.
-_RULESET_FORMATO = "sentinela/ruleset/1"
+#
+# NOTA DE RECEITA (mudança 2026-09-15): o discriminador passou de `sentinela/ruleset/1`
+# (barra) para `sentinela-ruleset/1` (hífen), padrão canônico `<tool>-ruleset/1` das quatro
+# ferramentas da suíte (esteira já usava `esteira-ruleset/1`). A troca MUDA o `ruleset_hash`
+# de todo laudo futuro sem mudar uma única regra — um laudo antigo fecha pela receita antiga,
+# um novo por esta. É travada por `test_schema_version_do_catalogo_e_canonico_da_suite`.
+_RULESET_FORMATO = "sentinela-ruleset/1"
 
 _TIMEOUT_GIT = 5.0
 
