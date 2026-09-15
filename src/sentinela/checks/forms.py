@@ -329,7 +329,7 @@ class FormsChecker(Checker):
                 recommendation=(
                     "Inclua um token anti-CSRF por sessão no formulário e valide-o no servidor, "
                     "e/ou marque os cookies de sessão como `SameSite=Lax|Strict`. Confirme a "
-                    "exploração real na edição Pro."
+                    "explorabilidade num teste autorizado (submissão cross-origin controlada)."
                 ),
                 references=(ref.OWASP_CSRF,),
             )
@@ -369,7 +369,8 @@ class FormsChecker(Checker):
                 ),
                 recommendation=(
                     "Escape a saída por contexto (HTML, atributo, JS, URL) e aplique uma CSP "
-                    "restritiva. A CONFIRMAÇÃO com marcador inerte é feita na edição Pro."
+                    "restritiva. A confirmação ativa usa um marcador inerte que prova o "
+                    "refletido sem executar."
                 ),
                 references=(ref.OWASP_XSS, ref.OWASP_CSP_CHEATSHEET),
             )

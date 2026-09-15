@@ -59,7 +59,8 @@ class HttpMethodsChecker(Checker):
                 ),
                 recommendation=(
                     "Confirme os métodos aceitos diretamente (ex.: `curl -X TRACE`/`-X PUT`) "
-                    "num ambiente autorizado; a edição Pro faz esse inventário ativo."
+                    "num ambiente autorizado. O TRACE é sondado ativamente aqui (leitura pura); "
+                    "PUT/DELETE não são enviados por serem destrutivos."
                 ),
                 references=(ref.OWASP_TOP10,),
             )

@@ -19,7 +19,7 @@
 [![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
-[![480 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
+[![481 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
 [![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-engineering-quality--method)
 
 </div>
@@ -268,7 +268,7 @@ Checks **never** talk to the network directly: they receive an immutable `Probe`
 
 ## 🔬 Engineering quality & method
 
-**Gates, measured right now (not aspiration):** 480 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 44 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
+**Gates, measured right now (not aspiration):** 481 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 44 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
 
 **Tests that don't accept a facade.** Beyond the happy path, the suite has invariant and timed tests that go red if detection is undone or degraded. Real examples from the repo: `test_corpo_hostil_nao_trava_a_varredura` times form extraction against a 256 KB hostile body and **fails if it exceeds 1 s** — locking the DoS regression down by SHA (the stdlib's `HTMLParser` took >120 s); and `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` proves the property that adding a finding **never** improves the score — accidentally recalibrating the curve turns it red.
 

@@ -68,3 +68,36 @@ def test_a_trava_realmente_pega_uma_frase_plantada() -> None:
     achadas_sujo = [f for f in _FRASES_ABSOLUTISTAS_PROIBIDAS if f.lower() in texto_sujo.lower()]
     assert achadas_limpo == []
     assert "a mesma engine" in achadas_sujo and "sem uma linha a mais" in achadas_sujo
+
+
+# --- Classe B/H: guarda do e-mail pessoal (alinha o sentinela aos outros 3 tools) -----
+#
+# O P0 de LGPD da auditoria cruzada foi o e-mail PESSOAL vazado no README do proprio
+# sentinela-pro (client-facing). O texto foi corrigido para contatopml26; este teste TRAVA
+# a classe: se o pessoal reaparecer em qualquer arquivo de texto versionado (README, badge
+# SVG, codigo, pyproject), o portao fica vermelho antes de qualquer push. Ataca a classe
+# (varre a arvore), nao o arquivo escolhido a dedo.
+_PESSOAL = "pmlsp23" + "@gmail.com"  # montado em pedacos para o guard nao casar a si mesmo
+_PUBLICO = "contatopml26@gmail.com"
+_EXTS_TEXTO = {".md", ".py", ".toml", ".svg", ".yml", ".yaml", ".json", ".txt", ".cfg"}
+_IGNORAR_DIRS = {".git", ".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"}
+
+
+def _arquivos_de_texto() -> list[Path]:
+    saida: list[Path] = []
+    for caminho in _RAIZ.rglob("*"):
+        if any(parte in _IGNORAR_DIRS for parte in caminho.parts):
+            continue
+        if caminho.is_file() and caminho.suffix.lower() in _EXTS_TEXTO:
+            saida.append(caminho)
+    return saida
+
+
+def test_email_pessoal_nunca_em_arquivo_versionado() -> None:
+    """Invariante B: o e-mail pessoal nunca aparece em arquivo de texto versionado."""
+    ofensores = [
+        str(c.relative_to(_RAIZ))
+        for c in _arquivos_de_texto()
+        if _PESSOAL in c.read_text(encoding="utf-8", errors="ignore")
+    ]
+    assert not ofensores, f"e-mail pessoal vazou em: {ofensores}; use {_PUBLICO}"
