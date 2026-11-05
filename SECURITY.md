@@ -49,3 +49,16 @@ a divulgação com quem reportou.
 
 Esta política cobre o código deste repositório. Ela **não** autoriza o uso da
 ferramenta contra terceiros sem consentimento.
+
+## Modelo de ameaças da suíte
+
+A Sentinela fala HTTP com um alvo escolhido pelo operador — e esse alvo pode ser
+hostil. [`docs/modelo-de-ameacas.md`](docs/modelo-de-ameacas.md) documenta como a
+ferramenta se defende de um alvo que tenta usar a própria varredura como vetor
+(bomba de descompressão, ReDoS em HTML hostil, SSRF via redirecionamento) — com o
+teste que tranca cada defesa — e declara os gaps que ainda não estão fechados. É o
+modelo de ameaça da suíte AppSec inteira ([Guardião](https://github.com/Paulo-Marcos-Lucio/guardiao),
+[Chaveiro](https://github.com/Paulo-Marcos-Lucio/chaveiro),
+[Esteira](https://github.com/Paulo-Marcos-Lucio/esteira) e
+[Laboratório OWASP](https://github.com/Paulo-Marcos-Lucio/laboratorio-owasp)),
+publicado aqui porque é a Sentinela quem tem a superfície de rede.
