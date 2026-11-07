@@ -22,13 +22,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 
 from hypothesis import given
 from hypothesis import strategies as st
 
 # >>> FUNCAO REAL DE PRODUCAO DA SENTINELA (substitui o stub `_artifact_sha256` do template) <<<
 from sentinela.checks._util import truncate
-from sentinela.core.proveniencia import serializar_com_selo
+from sentinela.core.proveniencia import hash_do_catalogo, serializar_com_selo
 
 
 def _artifact_sha256_producao(doc: dict[str, object]) -> str:
@@ -99,3 +100,22 @@ def test_marcador_de_elisao_da_producao_e_o_da_suite() -> None:
     cortado = truncate("x" * 500, limit=64)
     assert cortado.endswith("…")
     assert len(cortado) == 64
+
+
+# Formato compartilhado do `ruleset_hash` nas quatro ferramentas da suite (AUD0908 —
+# auditoria FN/FP 2026-09-08 apontou a Sentinela como a divergente). O CONTEUDO do hash
+# difere por tool, porque cada catalogo de regras e diferente — o que e contrato comum e
+# a FORMA: prefixo de algoritmo auto-descritivo + 64 hex minusculo, para que um cliente
+# confira os quatro laudos com uma unica regra de parsing (byte-compativel entre pares).
+_RULESET_HASH_FORMATO = re.compile(r"^sha256:[0-9a-f]{64}$")
+
+
+def test_ruleset_hash_segue_o_formato_compartilhado_da_suite() -> None:
+    """INVARIANTE (a CLASSE que AUD0908 apontava, nao so o exemplo medido na auditoria):
+    `hash_do_catalogo()` sempre tem a forma `sha256:<64 hex minusculo>` — o mesmo formato
+    que guardiao/chaveiro/esteira usam para `ruleset_hash` (conferido por inspecao direta
+    do codigo de producao dos quatro repos em 2026-11-07: os quatro convergem nesta forma).
+    Sem este teste, nada impede uma mudanca futura em `hash_do_catalogo` — por exemplo,
+    tirar o prefixo ou trocar de algoritmo — de quebrar essa regra compartilhada em
+    silencio, mesmo que o catalogo continue hasheando corretamente."""
+    assert _RULESET_HASH_FORMATO.fullmatch(hash_do_catalogo())
