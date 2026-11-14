@@ -297,3 +297,54 @@ def test_post_sem_token_algum_ainda_exige_csrf() -> None:
     # O lado oposto: um POST sem NENHUM token reconhecido continua sendo achado real.
     html = '<form method="post" action="/c"><input name="txt"></form>'
     assert "CSRF_TOKEN_AUSENTE" in _ids("https://a/c", html)
+
+
+# --- Classe 6: fp-csrf-todo-post-muda-estado (AUD0908) --------------------- #
+# INVARIANTE: CSRF só é exigível de OPERAÇÃO QUE MUDA ESTADO. Um POST cujo PRÓPRIO form se
+# identifica como busca (role=search, ou id/name com token busca/search/pesquisa) não é
+# CSRF-relevante; nem um POST cujo `action` aponta para OUTRA origem (o token deste site
+# não defende uma mudança de estado que acontece em outro lugar).
+def test_form_de_busca_por_role_nao_exige_csrf_mesmo_em_post() -> None:
+    html = '<form method="post" action="/s" role="search"><input name="q"></form>'
+    assert "CSRF_TOKEN_AUSENTE" not in _ids("https://a/s", html)
+
+
+def test_form_de_busca_por_id_ou_name_nao_exige_csrf_mesmo_em_post() -> None:
+    for attr in ('id="search-form"', 'id="busca"', 'name="pesquisa"'):
+        html = f'<form method="post" action="/s" {attr}><input name="q"></form>'
+        assert "CSRF_TOKEN_AUSENTE" not in _ids("https://a/s", html), attr
+
+
+def test_busca_casa_por_token_inteiro_nao_por_substring() -> None:
+    # 'research' CONTÉM 'search' como substring, mas não é o token — não pode isentar.
+    html = '<form method="post" action="/c" id="research-form"><input name="txt"></form>'
+    assert "CSRF_TOKEN_AUSENTE" in _ids("https://a/c", html)
+
+
+def test_action_para_outra_origem_nao_exige_csrf_deste_site() -> None:
+    html = '<form method="post" action="https://outro.com/webhook"><input name="txt"></form>'
+    assert "CSRF_TOKEN_AUSENTE" not in _ids("https://a/pagina", html)
+
+
+def test_action_mesma_origem_absoluta_ainda_exige_csrf() -> None:
+    # O lado que não pode afrouxar: action ABSOLUTO mas MESMA origem continua exigindo.
+    html = '<form method="post" action="https://a/c"><input name="txt"></form>'
+    assert "CSRF_TOKEN_AUSENTE" in _ids("https://a/c", html)
+
+
+@given(
+    busca_tok=st.sampled_from(sorted({"search", "busca", "pesquisa"})),
+    pre=st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6),
+    suf=st.text(alphabet="abcdefghijklmnopqrstuvwxyz", min_size=1, max_size=6),
+)
+def test_property_token_de_busca_no_meio_de_palavra_nao_isenta_mas_delimitado_isenta(
+    busca_tok: str, pre: str, suf: str
+) -> None:
+    from sentinela.checks.forms import _Form
+
+    # colado dentro de uma palavra maior -> NÃO é o token -> não isenta
+    colado = _Form(method="post", action="/c", form_id=pre + busca_tok + suf)
+    assert not colado.indica_busca
+    # o mesmo token delimitado (separador) -> É token inteiro -> isenta
+    delimitado = _Form(method="post", action="/c", form_id=f"{pre}-{busca_tok}-{suf}")
+    assert delimitado.indica_busca

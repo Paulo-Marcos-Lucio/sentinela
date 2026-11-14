@@ -19,7 +19,7 @@ import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from html import escape
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urljoin, urlsplit
 
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
@@ -53,6 +53,9 @@ _TOKENS_LGPD = frozenset({"cpf", "cnpj"})
 # Campo escondido que caracteriza defesa anti-CSRF (padrão dos frameworks). 'nonce' cobre o
 # token sincronizador do WordPress (_wpnonce/wpnonce/nonce), que a lista antiga não via.
 _CSRF = re.compile(r"csrf|xsrf|_token|authenticity_token|__requestverification|nonce", re.IGNORECASE)
+# Tokens (do id/name do PRÓPRIO form, por token inteiro) que indicam formulário de busca.
+# Busca não muda estado — não é CSRF-relevante mesmo em POST (AUD0908).
+_TOKENS_BUSCA = frozenset({"search", "busca", "pesquisa"})
 
 
 def _tokens_do_nome(name: str) -> list[str]:
@@ -89,6 +92,9 @@ class _Campo:
 class _Form:
     method: str  # "get" | "post"
     action: str
+    form_id: str = ""
+    nome: str = ""
+    role: str = ""
     metodo_explicito: bool = False
     tem_handler_js: bool = False
     tem_controle_submit: bool = False
@@ -103,6 +109,18 @@ class _Form:
     @property
     def tem_csrf(self) -> bool:
         return any(_CSRF.search(c.name or "") for c in self.campos)
+
+    @property
+    def indica_busca(self) -> bool:
+        """O form se IDENTIFICA como busca — por `role="search"` (landmark ARIA) ou por um
+        token inteiro 'search'/'busca'/'pesquisa' no seu próprio `id`/`name` (não nos nomes
+        dos campos: o token precisa ser do form, não de um campo qualquer que o contenha).
+        Busca não muda estado no servidor; cobrar token anti-CSRF dela é a classe de FP que
+        a auditoria 2026-09-08 apontou (AUD0908-fp-csrf-todo-post-muda-estado)."""
+        if self.role.strip().lower() == "search":
+            return True
+        tokens = set(_tokens_do_nome(self.form_id)) | set(_tokens_do_nome(self.nome))
+        return bool(tokens & _TOKENS_BUSCA)
 
     @property
     def submete_por_url(self) -> bool:
@@ -134,6 +152,8 @@ _A_METHOD = re.compile(r"""\bmethod\s*=\s*["']?\s*([a-zA-Z]+)""", re.IGNORECASE)
 _A_ACTION = re.compile(r"""\baction\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_NAME = re.compile(r"""\bname\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 _A_TYPE = re.compile(r"""\btype\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+_A_ID = re.compile(r"""\bid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
+_A_ROLE = re.compile(r"""\brole\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))""", re.IGNORECASE)
 # Handler de submit que INTERCEPTA o envio por JS (fetch/XHR): o form não submete pela URL.
 # Cobre o inline HTML/React (`onsubmit=`/`onSubmit=`), o Vue (`@submit.prevent`, `v-on:submit`)
 # e o Angular (`(ngSubmit)`). Antes só o `onsubmit=` inline era visto, e todo form de SPA de
@@ -149,6 +169,22 @@ _BOTAO_SUBMIT_RE = re.compile(
     rf"""<button\b(?![^>]{{0,{_ATTR_SCAN}}}?\btype\s*=\s*["']?(?:button|reset)\b)""",
     re.IGNORECASE,
 )
+
+
+def _mesma_origem(action: str, target_url: str) -> bool:
+    """O `action` (resolvido contra a URL do alvo) aponta para a MESMA origem?
+
+    Um form sem `action` (ou com `action=""`) submete para a própria página — mesma
+    origem. Quando o `action` aponta para outra origem, o token anti-CSRF DESTE site não
+    é a defesa aplicável: a mudança de estado (se houver) acontece no destino, não aqui —
+    cobrar CSRF_TOKEN_AUSENTE seria apontar para a defesa errada (AUD0908)."""
+    if not action:
+        return True
+    absoluta = urljoin(target_url, action)
+    a, b = urlsplit(absoluta), urlsplit(target_url)
+    porta_a = a.port or {"http": 80, "https": 443}.get(a.scheme)
+    porta_b = b.port or {"http": 80, "https": 443}.get(b.scheme)
+    return (a.scheme, a.hostname, porta_a) == (b.scheme, b.hostname, porta_b)
 
 
 def _attr(regex: re.Pattern[str], texto: str) -> str:
@@ -192,6 +228,9 @@ def _coletar_forms(html: str) -> list[_Form]:
             _Form(
                 method=metodo,
                 action=action,
+                form_id=_attr(_A_ID, cabecalho),
+                nome=_attr(_A_NAME, cabecalho),
+                role=_attr(_A_ROLE, cabecalho),
                 metodo_explicito=bool(metodo_raw),
                 tem_handler_js=bool(_A_HANDLER_JS.search(cabecalho)),
                 tem_controle_submit=tem_controle_submit,
@@ -217,12 +256,12 @@ class FormsChecker(Checker):
             return  # resposta é bloqueio/erro, não o alvo (classe C2)
         html = probe.body_snippet or ""
 
-        yield from self._forms(html, probe.truncated)
+        yield from self._forms(html, ctx.target.url, probe.truncated)
         yield from self._reflexao(html, ctx)
         yield from self._dado_sensivel_na_url(ctx)
 
     # --- formulários ------------------------------------------------------- #
-    def _forms(self, html: str, truncado: bool = False) -> Iterable[Finding]:
+    def _forms(self, html: str, target_url: str, truncado: bool = False) -> Iterable[Finding]:
         senha_get = False
         form_http = False
         csrf_ausente = False
@@ -246,9 +285,20 @@ class FormsChecker(Checker):
             # no checker de conteúdo — reportar aqui de novo seria penalidade dupla.
             if f.tem_senha and f.action.lower().startswith("http://"):
                 form_http = True
-            # CSRF só é exigível de formulário que MUDA estado (POST). Form GET de busca
-            # não precisa de token — exigir seria falso positivo.
-            if f.method == "post" and not f.tem_csrf and not tem_csrf_meta:
+            # CSRF só é exigível de OPERAÇÃO QUE MUDA ESTADO. Form GET de busca não precisa
+            # de token — exigir seria falso positivo. Em POST, duas exceções da mesma
+            # classe (AUD0908): o PRÓPRIO form se identifica como busca (role=search ou
+            # id/name com token busca/search/pesquisa — busca não muda estado mesmo em
+            # POST), ou o `action` aponta para outra origem (o token deste site não
+            # defende uma mudança de estado que acontece em outro lugar). Heurística: na
+            # dúvida (sinal ausente), o form cai no caso comum e o achado é reportado.
+            if (
+                f.method == "post"
+                and not f.tem_csrf
+                and not tem_csrf_meta
+                and not f.indica_busca
+                and _mesma_origem(f.action, target_url)
+            ):
                 csrf_ausente = True
 
         if truncado:
