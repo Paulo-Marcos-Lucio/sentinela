@@ -180,6 +180,12 @@ _PLAIN: dict[str, str] = {
         "código malicioso e o seu site o executa confiando cegamente — como aceitar um pacote sem "
         "verificar se o lacre foi violado."
     ),
+    "SRI_INVIAVEL_TERCEIRO_DINAMICO": (
+        "Um dos scripts externos sem 'lacre de autenticidade' é um banner de cookies ou "
+        "tag-manager — o fornecedor troca o conteúdo sem avisar, então não dá pra fixar um "
+        "lacre fixo sem a página quebrar na próxima troca. É um risco que fica por confiança "
+        "no fornecedor, não por falta de cuidado do site."
+    ),
     "FORM_ACTION_INSEGURA": (
         "O formulário da página envia o que o visitante digita por um caminho sem cadeado (HTTP). "
         "Tudo — inclusive login e senha — viaja num cartão-postal aberto que qualquer um no caminho "

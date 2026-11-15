@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from conftest import make_context, make_probe, make_target
 from sentinela.checks.content import ContentChecker
 
@@ -45,6 +48,97 @@ def test_script_mesma_origem_nao_exige_sri() -> None:
 def test_stylesheet_terceiro_sem_sri() -> None:
     body = '<link rel="stylesheet" href="https://fonts.terceiro.com/x.css">'
     assert "SRI_AUSENTE" in _run(body)
+
+
+# Classe AUD0908-fp-sri-cdn-dinamico-fora-do-allowlist: SRI inviável não é "domínio
+# Google" — é "loader de consentimento/tag-manager versionless de terceiro". A classe
+# precisa reconhecer MÚLTIPLOS fornecedores concorrentes, não só o caso de campo que
+# originou o item (Google), senão é o mesmo defeito com outro nome.
+def test_loader_google_tag_manager_e_sri_inviavel_nao_sri_ausente() -> None:
+    body = '<script src="https://www.googletagmanager.com/gtag/js?id=G-ABC123"></script>'
+    achados = _run(body)
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" in achados
+    assert "SRI_AUSENTE" not in achados
+
+
+def test_loader_cookiebot_de_fornecedor_concorrente_tambem_e_sri_inviavel() -> None:
+    """A classe não pode ser um allowlist só-Google: outro fornecedor, mesmo padrão."""
+    body = '<script src="https://consent.cookiebot.com/uc.js?cbid=abc-123"></script>'
+    achados = _run(body)
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" in achados
+    assert "SRI_AUSENTE" not in achados
+
+
+def test_loader_onetrust_tambem_e_sri_inviavel() -> None:
+    body = '<script src="https://cdn.cookielaw.org/consent/abc/OtAutoBlock.js"></script>'
+    achados = _run(body)
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" in achados
+    assert "SRI_AUSENTE" not in achados
+
+
+def test_biblioteca_terceiro_com_versao_no_caminho_continua_sri_ausente() -> None:
+    """Caminho VERSIONADO (o fornecedor pode fixar hash) não é a classe inviável —
+    mesmo contendo uma palavra da lista, como 'cmp' num nome de pacote qualquer."""
+    body = '<script src="https://cdn.terceiro.com/libs/cmp-sdk-2.3.1.min.js"></script>'
+    achados = _run(body)
+    assert "SRI_AUSENTE" in achados
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" not in achados
+
+
+def test_script_terceiro_generico_sem_palavra_da_classe_continua_sri_ausente() -> None:
+    body = '<script src="https://cdn.terceiro.com/lib.js"></script>'
+    achados = _run(body)
+    assert "SRI_AUSENTE" in achados
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" not in achados
+
+
+# INVARIANTE (a classe, não o exemplo): para QUALQUER um dos fornecedores conhecidos
+# de loader de consentimento/tag-manager, um caminho SEM versão sempre vira o achado
+# fraco (SRI_INVIAVEL_TERCEIRO_DINAMICO), nunca o forte (SRI_AUSENTE) — e isso vale
+# para a lista inteira de fornecedores, não só para o caso de campo (Google).
+_PALAVRAS_LOADER_DINAMICO = (
+    "gtag",
+    "gtm",
+    "tagmanager",
+    "consent",
+    "cookiebot",
+    "onetrust",
+    "otsdkstub",
+    "otautoblock",
+    "cmp",
+    "tcf",
+    "cookieconsent",
+    "usercentrics",
+    "didomi",
+    "quantcast",
+    "trustarc",
+    "cookieyes",
+    "iubenda",
+)
+
+
+@settings(max_examples=200)
+@given(palavra=st.sampled_from(_PALAVRAS_LOADER_DINAMICO), sufixo=st.sampled_from(("js", "php")))
+def test_invariante_palavra_da_classe_sem_versao_sempre_e_inviavel(palavra: str, sufixo: str) -> None:
+    body = f'<script src="https://cdn.fornecedor-{palavra}.example/{palavra}.{sufixo}"></script>'
+    achados = _run(body)
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" in achados, f"não reconheceu a classe para {palavra!r}"
+    assert "SRI_AUSENTE" not in achados
+
+
+@settings(max_examples=200)
+@given(
+    palavra=st.sampled_from(_PALAVRAS_LOADER_DINAMICO),
+    major=st.integers(min_value=0, max_value=99),
+    minor=st.integers(min_value=0, max_value=99),
+)
+def test_invariante_versao_no_caminho_volta_a_ser_sri_ausente(palavra: str, major: int, minor: int) -> None:
+    """Espelho da invariante: havendo versão no próprio caminho, SRI volta a ser
+    viável — a classe "inviável" nunca mascara um recurso que o fornecedor versiona."""
+    body = f'<script src="https://cdn.fornecedor-{palavra}.example/{palavra}-{major}.{minor}.js"></script>'
+    achados = _run(body)
+    assert "SRI_AUSENTE" in achados
+    assert "SRI_INVIAVEL_TERCEIRO_DINAMICO" not in achados
 
 
 def test_form_action_insegura() -> None:

@@ -34,6 +34,16 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   como `CERT_NAO_CONFIAVEL` (ALTA, "certificado feito em casa"). Agora emite o achado
   dedicado **`CERT_CADEIA_INCOMPLETA`** (o navegador recupera via AIA; clientes estritos
   recusam) — distinguido pelo código de verificação 20/21, sem tocar a rede.
+- **SRI inviável em loader dinâmico de terceiro deixou de ser `SRI_AUSENTE`.** Script/
+  estilo de terceiro sem `integrity` virava sempre `SRI_AUSENTE` (BAIXA, "fixe o hash"),
+  mesmo quando é um loader de consentimento/tag-manager (Google Tag Manager, Cookiebot,
+  OneTrust, Didomi, Usercentrics, Quantcast, TrustArc, CookieYes, Iubenda, CMP genérico)
+  — o fornecedor troca o conteúdo sem mudar a URL, e fixar um hash quebraria a página na
+  próxima atualização dele. Esses casos agora emitem o achado dedicado
+  **`SRI_INVIAVEL_TERCEIRO_DINAMICO`** (INFO). A classe é reconhecida pela palavra no
+  host OU no caminho de MÚLTIPLOS fornecedores concorrentes, não por um domínio único —
+  um recurso de terceiro cujo caminho tem um token de versão continua `SRI_AUSENTE`,
+  porque aí SRI é viável.
 
 ### Corrigido — falsos negativos
 - **`CSP_AUSENTE` deixa de ser mascarado por corpo truncado quando o `<head>` foi lido

@@ -88,6 +88,7 @@ _TAGS: dict[str, Tag] = {
     # Conteúdo HTML / integridade da página
     "CONTEUDO_MISTO": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "SRI_AUSENTE": Tag(A03, "CWE-353", "Missing Support for Integrity Check"),
+    "SRI_INVIAVEL_TERCEIRO_DINAMICO": Tag(A03, "CWE-353", "Missing Support for Integrity Check"),
     "FORM_ACTION_INSEGURA": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     "SENHA_SEM_HTTPS": Tag(A04, "CWE-319", "Cleartext Transmission of Sensitive Information"),
     # CORS
