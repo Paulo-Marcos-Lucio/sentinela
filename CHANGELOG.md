@@ -34,6 +34,12 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   como `CERT_NAO_CONFIAVEL` (ALTA, "certificado feito em casa"). Agora emite o achado
   dedicado **`CERT_CADEIA_INCOMPLETA`** (o navegador recupera via AIA; clientes estritos
   recusam) — distinguido pelo código de verificação 20/21, sem tocar a rede.
+- **"Versão exposta" agora exige o token de versão em QUALQUER cabeçalho, não só
+  `Server`.** `X-Powered-By`, `X-Generator` e os cabeçalhos de versão do ASP.NET
+  disparavam `VERSAO_STACK_EXPOSTA` — com o texto de impacto prometendo "mapear CVEs
+  daquela versão específica" — mesmo quando só o NOME do produto tinha vazado
+  (`X-Powered-By: PHP`, sem número). Nome sem versão agora vira o achado dedicado
+  **`TECNOLOGIA_DIVULGADA_SEM_VERSAO`** (INFO), sem a promessa de CVE por versão.
 
 ### Corrigido — falsos negativos
 - **`CSP_AUSENTE` deixa de ser mascarado por corpo truncado quando o `<head>` foi lido

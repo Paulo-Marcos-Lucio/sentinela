@@ -218,6 +218,11 @@ _PLAIN: dict[str, str] = {
         "consulta a lista pública de falhas daquela versão — como um ladrão que já sabe o modelo "
         "exato da sua fechadura."
     ),
+    "TECNOLOGIA_DIVULGADA_SEM_VERSAO": (
+        "O servidor conta a marca do software que usa, mas sem dizer a versão. É menos grave que "
+        "revelar o modelo exato da fechadura, mas ainda ajuda o ladrão a escolher qual chave testar "
+        "primeiro."
+    ),
     "LISTAGEM_DIRETORIO": (
         "Uma pasta do site mostra a lista de todos os arquivos que tem dentro, como uma gaveta "
         "aberta — o visitante vê e baixa coisas que não deveriam estar à mostra."

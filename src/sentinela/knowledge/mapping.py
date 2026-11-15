@@ -100,6 +100,7 @@ _TAGS: dict[str, Tag] = {
     "HTTP_METODOS_PERIGOSOS": Tag(A02, "CWE-650", "Trusting HTTP Permission Methods on the Server Side"),
     # Exposição de informação
     "VERSAO_STACK_EXPOSTA": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
+    "TECNOLOGIA_DIVULGADA_SEM_VERSAO": Tag(A02, "CWE-200", "Exposure of Sensitive Information"),
     "LISTAGEM_DIRETORIO": Tag(A02, "CWE-548", "Exposure of Information Through Directory Listing"),
     # Arquivos/rotas sensíveis
     "GIT_EXPOSTO": Tag(A02, "CWE-527", "Exposure of Version-Control Repository to Web"),
