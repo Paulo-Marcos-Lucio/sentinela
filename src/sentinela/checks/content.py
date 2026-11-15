@@ -79,6 +79,36 @@ _PASSWORD_INPUT_RE = re.compile(
 
 _MAX_EVIDENCIA = 5
 
+# A CLASSE "SRI inviável" não é um domínio específico — é o loader de consentimento
+# (banner de cookies/CMP) ou de tag-manager/analytics que o FORNECEDOR serve sempre
+# pela MESMA URL e cujo conteúdo ele troca no servidor sem mudar o endereço. Fixar um
+# hash SRI nessa URL quebra a página na próxima atualização do fornecedor — não é
+# negligência do site, é a arquitetura do produto. Reconhecer pela PALAVRA no host OU
+# no caminho (multi-fornecedor: Google, Cookiebot, OneTrust, Didomi, Usercentrics,
+# Quantcast, TrustArc, CookieYes, Iubenda, CMP genérico) em vez de alvo fixo — um
+# allowlist só de domínio Google generaliza mal porque o mesmo padrão existe em
+# fornecedores concorrentes, às vezes só no nome do produto (host), às vezes só no
+# nome do arquivo (caminho).
+_LOADER_DINAMICO_RE = re.compile(
+    r"(?:^|[/_.-])(?:gtag|gtm|tagmanager|consent|cookiebot|onetrust|otsdkstub|"
+    r"otautoblock|cmp|tcf|cookieconsent|usercentrics|didomi|quantcast|trustarc|"
+    r"cookieyes|iubenda)(?:[/_.-]|$)",
+    re.IGNORECASE,
+)
+# Token de versão (semver-like, ex. "/2.3.1/" ou "lib-1.2.js") OU hash de conteúdo
+# (ex. "/a1b2c3d4.../") em qualquer segmento do CAMINHO: presença de um identificador
+# assim significa que o PRÓPRIO fornecedor versiona a URL, então fixar SRI volta a
+# ser viável — a classe deixa de se aplicar. Não olha o host: subdomínio não é versão.
+_VERSAO_NO_CAMINHO_RE = re.compile(r"[/_-]v?\d+(?:\.\d+){1,3}(?:[/_.-]|$)|[/_-][0-9a-f]{8,40}(?:[/_.-]|$)")
+
+
+def _loader_dinamico_de_terceiro(url: str) -> bool:
+    """A classe do item AUD0908-fp-sri-cdn-dinamico-fora-do-allowlist: loader de
+    consentimento/tag-manager versionless de terceiro, não um domínio específico."""
+    partes = urlsplit(url if "//" in url else "https:" + url)
+    busca = f"{partes.hostname or ''}{partes.path}"
+    return bool(_LOADER_DINAMICO_RE.search(busca)) and not _VERSAO_NO_CAMINHO_RE.search(partes.path)
+
 
 def _host_of(url: str) -> str:
     """Host (minúsculo, sem porta) de uma URL absoluta ou protocol-relative (``//host``)."""
@@ -159,12 +189,17 @@ class ContentChecker(Checker):
     def _check_sri(self, body: str, target_host: str) -> Iterable[Finding]:
         alvo = _base(target_host.lower())
         externos: set[str] = set()
+        inviaveis: set[str] = set()
 
         def _consumir(url: str, tag: str) -> None:
             if url.startswith("http://"):
                 return  # cleartext já é tratado como conteúdo misto
             host = _host_of(url)
-            if host and _base(host) != alvo and not _INTEGRITY_RE.search(tag):
+            if not host or _base(host) == alvo or _INTEGRITY_RE.search(tag):
+                return
+            if _loader_dinamico_de_terceiro(url):
+                inviaveis.add(host)
+            else:
                 externos.add(host)
 
         for tag in _SCRIPT_TAG_RE.findall(body):
@@ -178,29 +213,56 @@ class ContentChecker(Checker):
             if m:
                 _consumir(m.group(1), tag)
 
-        if not externos:
-            return
-        amostra = sorted(externos)[:_MAX_EVIDENCIA]
-        yield Finding(
-            id="SRI_AUSENTE",
-            title="Sub-recurso de terceiro sem Subresource Integrity (SRI)",
-            category=self.category,
-            severity=Severity.LOW,
-            description=(
-                "Há scripts/estilos carregados de origens externas sem o atributo `integrity` (SRI)."
-            ),
-            evidence=", ".join(amostra),
-            impact=(
-                "Sem SRI, se o servidor de terceiro (CDN) for comprometido ou sequestrado, "
-                "o navegador executa o código adulterado com total confiança — um vetor "
-                "clássico de ataque à cadeia de suprimentos."
-            ),
-            recommendation=(
-                'Adicione `integrity="sha384-..."` e `crossorigin="anonymous"` aos '
-                "`<script>`/`<link>` de terceiros, fixando o hash da versão esperada."
-            ),
-            references=(ref.MDN_SRI, ref.OWASP_TOP10),
-        )
+        if externos:
+            amostra = sorted(externos)[:_MAX_EVIDENCIA]
+            yield Finding(
+                id="SRI_AUSENTE",
+                title="Sub-recurso de terceiro sem Subresource Integrity (SRI)",
+                category=self.category,
+                severity=Severity.LOW,
+                description=(
+                    "Há scripts/estilos carregados de origens externas sem o atributo `integrity` (SRI)."
+                ),
+                evidence=", ".join(amostra),
+                impact=(
+                    "Sem SRI, se o servidor de terceiro (CDN) for comprometido ou sequestrado, "
+                    "o navegador executa o código adulterado com total confiança — um vetor "
+                    "clássico de ataque à cadeia de suprimentos."
+                ),
+                recommendation=(
+                    'Adicione `integrity="sha384-..."` e `crossorigin="anonymous"` aos '
+                    "`<script>`/`<link>` de terceiros, fixando o hash da versão esperada."
+                ),
+                references=(ref.MDN_SRI, ref.OWASP_TOP10),
+            )
+
+        if inviaveis:
+            amostra_inviavel = sorted(inviaveis)[:_MAX_EVIDENCIA]
+            yield Finding(
+                id="SRI_INVIAVEL_TERCEIRO_DINAMICO",
+                title="SRI inviável em loader dinâmico de terceiro (consentimento/tag-manager)",
+                category=self.category,
+                severity=Severity.INFO,
+                description=(
+                    "Scripts/estilos sem `integrity` cujo caminho identifica um loader de "
+                    "consentimento ou tag-manager — o fornecedor serve sempre a mesma URL e "
+                    "troca o conteúdo no servidor, então fixar um hash SRI quebraria a página "
+                    "na próxima atualização dele."
+                ),
+                evidence=", ".join(amostra_inviavel),
+                impact=(
+                    "SRI não é aplicável aqui sem risco de quebrar a página a cada atualização "
+                    "do fornecedor — isso NÃO elimina o risco de cadeia de suprimentos descrito "
+                    "em SRI_AUSENTE, apenas reconhece que a mitigação usual é inviável para este "
+                    "tipo de recurso."
+                ),
+                recommendation=(
+                    "Se o fornecedor publicar uma versão fixa (self-hosted ou com caminho "
+                    "versionado), prefira-a e aplique SRI nela. Caso contrário, trate o risco "
+                    "por confiança no fornecedor (CSP com origem restrita) em vez de SRI."
+                ),
+                references=(ref.MDN_SRI, ref.OWASP_TOP10),
+            )
 
     def _check_insecure_form(self, body: str) -> Iterable[Finding]:
         acoes = {m.group(1) for m in _FORM_ACTION_HTTP_RE.finditer(body)}
