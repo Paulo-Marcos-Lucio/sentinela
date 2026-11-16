@@ -53,6 +53,18 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   a proveniência com **`COLETA_PRIMARIA_RECUPERADA`**. Cert não-verificável ≠ alvo
   inacessível: os cabeçalhos ainda são lidos e laudados.
 
+### Corrigido — evidência duplicada
+- **Cookie entregue mais de uma vez não aparece repetido na evidência.** Quando o
+  mesmo cookie chegava por múltiplos `Set-Cookie` (proxy que retransmite o
+  cabeçalho, agregação de vários hops, ou duplicata literal do servidor), seu nome
+  entrava mais de uma vez em `COOKIE_SEM_HTTPONLY`/`COOKIE_SEM_SECURE`/
+  `COOKIE_SEM_SAMESITE` e nas demais listas de evidência — a repetição inflava a
+  contagem sem acrescentar fato novo. Os cookies são agora deduplicados por nome +
+  atributos de segurança (não por valor, que varia a cada emissão sem mudar o
+  veredito) antes de montar qualquer lista; um nome repetido com atributos
+  DIFERENTES (ex.: mesmo nome em dois `Path`, um `Secure` e outro não) continua
+  valendo como dois cookies reais, cada um com seu achado.
+
 ### Alterado
 - **A nota de higiene ESCALA o teto de conceito com a cobertura da varredura.** Uma
   varredura parcial (checagens desligadas por `--somente`/`--pular`/`--perfil rapido`, ou

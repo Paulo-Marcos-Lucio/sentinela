@@ -201,6 +201,27 @@ def _parse_cookie(raw: str) -> _Cookie:
     )
 
 
+def _deduplicar(cookies: list[_Cookie]) -> list[_Cookie]:
+    """O mesmo cookie (nome + atributos de segurança) entregue mais de uma vez — o
+    servidor repete o `Set-Cookie`, ou ele vem agregado de múltiplos hops/proxies —
+    conta uma vez só. Sem isso, o mesmo nome aparece repetido em cada lista de
+    evidência (`sem_httponly`, `sem_secure`, ...), inflando a contagem sem
+    acrescentar fato novo sobre o alvo. A chave usa nome + os atributos que as
+    checagens de fato avaliam (não ``value``, que pode variar a cada emissão sem
+    mudar o veredito de segurança) — um nome repetido com atributos DIFERENTES
+    (ex.: mesmo nome em dois `Path` distintos, um Secure e outro não) continua
+    sendo dois cookies reais, cada um com seu próprio achado."""
+    vistos: set[tuple[str, bool, bool, str | None, str | None, str | None]] = set()
+    unicos: list[_Cookie] = []
+    for c in cookies:
+        chave = (c.name, c.secure, c.http_only, c.same_site, c.path, c.domain)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        unicos.append(c)
+    return unicos
+
+
 def _prefixo_violado(c: _Cookie) -> bool:
     """Verdadeiro se o nome usa prefixo de segurança sem cumprir os requisitos.
 
@@ -232,6 +253,7 @@ class CookiesChecker(Checker):
         # Cookies de REMOÇÃO (Max-Age=0/expires 1970/valor vazio) não carregam valor vivo:
         # cobrar HttpOnly/Secure/SameSite deles é falso positivo (classe C5).
         cookies = [c for c in (_parse_cookie(c) for c in ctx.primary.set_cookies) if not c.removal]
+        cookies = _deduplicar(cookies)
         if not cookies:
             return
 

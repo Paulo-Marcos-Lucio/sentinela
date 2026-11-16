@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from hypothesis import given, settings
+from hypothesis import strategies as st
+
 from conftest import make_context, make_probe, make_target
 from sentinela.checks.cookies import CookiesChecker
 
@@ -10,6 +13,12 @@ def _run(set_cookies: tuple[str, ...], final_url: str = "https://example.com/"):
     probe = make_probe(set_cookies=set_cookies, final_url=final_url)
     ctx = make_context(primary=probe, target=make_target(final_url))
     return {f.id for f in CookiesChecker().run(ctx)}
+
+
+def _findings(set_cookies: tuple[str, ...], final_url: str = "https://example.com/"):
+    probe = make_probe(set_cookies=set_cookies, final_url=final_url)
+    ctx = make_context(primary=probe, target=make_target(final_url))
+    return list(CookiesChecker().run(ctx))
 
 
 def test_cookie_seguro_completo_nao_gera_achado() -> None:
@@ -58,6 +67,79 @@ def test_samesite_none_sem_secure() -> None:
 def test_samesite_none_com_secure_ok() -> None:
     ids = _run(("sid=abc; Secure; HttpOnly; SameSite=None",))
     assert "COOKIE_SAMESITE_NONE_INSEGURO" not in ids
+
+
+# --------------------------------------------------------------------------- #
+# Deduplicação: o mesmo cookie entregue mais de uma vez (proxy que retransmite o
+# `Set-Cookie`, agregação de múltiplos hops, ou duplicata literal do servidor) não
+# pode aparecer repetido na evidência — o fato é "este cookie carece da flag",
+# não "este cookie carece da flag N vezes".
+# --------------------------------------------------------------------------- #
+def test_cookie_duplicado_por_multiplos_hops_aparece_uma_vez_na_evidencia() -> None:
+    ids = _findings(("sid=abc; SameSite=Lax", "sid=abc; SameSite=Lax", "sid=abc; SameSite=Lax"))
+    achados = [f for f in ids if f.id == "COOKIE_SEM_SECURE"]
+    assert len(achados) == 1
+    assert achados[0].evidence == "sid"
+
+
+def test_cookie_duplicado_conta_uma_vez_em_todas_as_listas() -> None:
+    # Sem HttpOnly, sem Secure E sem SameSite, emitido 2x identicamente — as três
+    # listas de evidência precisam tratar como um cookie só, não dois.
+    achados = _findings(("session_token=abc", "session_token=abc"))
+    por_id = {f.id: f for f in achados}
+    assert por_id["COOKIE_SEM_HTTPONLY"].evidence == "session_token"
+    assert por_id["COOKIE_SEM_SECURE"].evidence == "session_token"
+    assert por_id["COOKIE_SEM_SAMESITE"].evidence == "session_token"
+
+
+def test_mesmo_nome_com_atributos_diferentes_nao_e_colapsado() -> None:
+    # Mesmo nome, dois `Path` distintos, um Secure e outro não — são dois cookies
+    # reais (RFC 6265: a identidade inclui Path/Domain), não uma duplicata a
+    # descartar. O achado de falta de Secure continua valendo.
+    ids = _run(
+        ("sid=abc; Secure; HttpOnly; SameSite=Lax; Path=/a", "sid=abc; HttpOnly; SameSite=Lax; Path=/b")
+    )
+    assert "COOKIE_SEM_SECURE" in ids
+
+
+# Nome de cookie: ASCII alfanumérico, sem os caracteres que `_parse_cookie` usa como
+# separador (`=`, `;`) — o que o parser aceita como nome de verdade.
+_NOME_COOKIE = st.text(
+    alphabet=st.characters(whitelist_categories=("Ll", "Lu", "Nd")), min_size=1, max_size=12
+).filter(lambda s: s.isascii())
+
+
+@st.composite
+def _cookie_repetido(draw: st.DrawFn) -> tuple[str, tuple[str, ...]]:
+    nome = draw(_NOME_COOKIE)
+    partes = [f"{nome}=valor"]
+    if draw(st.booleans()):
+        partes.append("Secure")
+    if draw(st.booleans()):
+        partes.append("HttpOnly")
+    same_site = draw(st.sampled_from(["Lax", "Strict", None]))
+    if same_site:
+        partes.append(f"SameSite={same_site}")
+    raw = "; ".join(partes)
+    repeticoes = draw(st.integers(min_value=2, max_value=5))
+    return nome, (raw,) * repeticoes
+
+
+@settings(max_examples=200)
+@given(dados=_cookie_repetido())
+def test_propriedade_cookie_repetido_aparece_no_maximo_uma_vez_por_lista(
+    dados: tuple[str, tuple[str, ...]],
+) -> None:
+    """INVARIANTE: um mesmo cookie (nome + atributos iguais), repetido por quantos
+    hops/emissões forem, aparece no máximo 1x em cada lista de evidência — nunca 0
+    (o achado continua existindo) e nunca >1 (a repetição não é fato novo)."""
+    nome, set_cookies = dados
+    for achado in _findings(set_cookies):
+        assert achado.evidence is not None
+        ocorrencias = achado.evidence.split(", ")
+        assert ocorrencias.count(nome) <= 1, (
+            f"{achado.id}: '{nome}' aparece {ocorrencias.count(nome)}x em '{achado.evidence}'"
+        )
 
 
 def test_prefixo_host_invalido() -> None:
