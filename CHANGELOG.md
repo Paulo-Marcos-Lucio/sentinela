@@ -34,6 +34,16 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
   como `CERT_NAO_CONFIAVEL` (ALTA, "certificado feito em casa"). Agora emite o achado
   dedicado **`CERT_CADEIA_INCOMPLETA`** (o navegador recupera via AIA; clientes estritos
   recusam) — distinguido pelo código de verificação 20/21, sem tocar a rede.
+- **`ROBOTS_CAMINHOS_SENSIVEIS` deixa de disparar em padrão de `robots.txt` e em
+  convenção pública de framework.** Uma entrada `Disallow` com metacaractere de padrão
+  (`*` ou terminada em `$`, ex.: `/*.sql$`) não é um caminho navegável e era lida pelo
+  texto bruto, casando `sql` por coincidência; agora é descartada por inteiro antes da
+  checagem de sensibilidade. O termo `sql` também passou a exigir fronteira de token nos
+  dois lados (não só à esquerda), parando de casar dentro de `sqlite` — a mesma âncora
+  dupla fecha a classe inteira (`test` em `testimonials`, etc.), não só este exemplo.
+  Por fim, `mail_password_form`, `user/password`, `changelog` e `install` — boilerplate
+  de robots.txt padrão de Plone/Zope e Drupal — entraram numa lista de convenções
+  públicas descontada do aviso passivo.
 
 ### Corrigido — falsos negativos
 - **`CSP_AUSENTE` deixa de ser mascarado por corpo truncado quando o `<head>` foi lido
