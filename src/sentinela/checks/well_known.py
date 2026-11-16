@@ -16,11 +16,24 @@ from urllib.parse import urljoin
 
 from sentinela.checks.base import Checker
 from sentinela.core.context import ScanContext
-from sentinela.core.disclosure import SENSIVEL_RE
+from sentinela.core.disclosure import SENSIVEL_RE, e_convencao_publica
 from sentinela.core.models import Category, Finding, Severity
 from sentinela.knowledge import references as ref
 
 _DISALLOW_RE = re.compile(r"^\s*Disallow\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _e_padrao_nao_navegavel(caminho: str) -> bool:
+    """``True`` se a entrada é um PADRÃO (curinga), não um endereço navegável.
+
+    ``Disallow: /*.sql$`` não diz "existe uma pasta sensível" — diz "não indexe
+    nenhum arquivo .sql do site", uma regra genérica. Tratar ``*``/``$`` como se
+    fossem parte de um caminho concreto gera o falso positivo que esta função
+    existe para fechar: o caractere de padrão casa com um termo sensível por
+    coincidência textual (ex.: ``.sql`` em ``/*.sql$``) sem que exista caminho
+    algum para visitar.
+    """
+    return "*" in caminho or caminho.endswith("$")
 
 
 class WellKnownChecker(Checker):
@@ -46,6 +59,10 @@ class WellKnownChecker(Checker):
         for match in _DISALLOW_RE.finditer(body):
             caminho = match.group(1)
             if caminho in ("/", "*"):
+                continue
+            if _e_padrao_nao_navegavel(caminho):
+                continue
+            if e_convencao_publica(caminho):
                 continue
             if SENSIVEL_RE.search(caminho):
                 sensiveis.append(caminho)

@@ -88,9 +88,10 @@ TERMOS_DE_DADOS: tuple[str, ...] = (
 
 
 def _ancorado(termos: tuple[str, ...]) -> re.Pattern[str]:
-    """Termo ancorado no início do caminho ou após um separador — evita casar
-    'log' dentro de 'blog' ou 'test' dentro de 'contest'."""
-    return re.compile(r"(?:^|[/._\-])(?:" + "|".join(termos) + r")", re.IGNORECASE)
+    """Termo ancorado em início E fim de token — só entre separadores (ou borda do
+    caminho) dos dois lados. Evita casar 'log' dentro de 'blog' (âncora esquerda) e
+    'sql' dentro de 'sqlite', ou 'test' dentro de 'testimonials' (âncora direita)."""
+    return re.compile(r"(?:^|[/._\-])(?:" + "|".join(termos) + r")(?:$|[/._\-])", re.IGNORECASE)
 
 
 #: Conservador: o que o aviso PASSIVO do ``well-known`` considera sensível.
@@ -98,6 +99,26 @@ SENSIVEL_RE = _ancorado(TERMOS_SENSIVEIS)
 
 #: Amplo: o que a sondagem AUTORIZADA aceita visitar. Só vira achado com assinatura.
 SONDAVEL_RE = _ancorado(TERMOS_SENSIVEIS + TERMOS_DE_DADOS)
+
+#: Convenções de framework/CMS que aparecem no robots.txt padrão de várias pilhas
+#: (Plone/Zope, Drupal) e casam com um termo sensível por coincidência lexical —
+#: 'mail_password_form' e 'user/password' contêm "password" sem expor senha alguma;
+#: 'changelog' e 'install' são rotas de boilerplate, não escolha deste site. O aviso
+#: PASSIVO desconta essas convenções; a sondagem autorizada (que decide pela
+#: assinatura do corpo, não pelo nome) não precisa delas.
+CONVENCOES_PUBLICAS: tuple[str, ...] = (
+    "mail_password_form",
+    "user/password",
+    "changelog",
+    "install",
+)
+
+
+def e_convencao_publica(caminho: str) -> bool:
+    """``True`` se o caminho é um boilerplate conhecido, não uma escolha do alvo."""
+    baixo = caminho.lower()
+    return any(convencao in baixo for convencao in CONVENCOES_PUBLICAS)
+
 
 _DISALLOW_RE = re.compile(r"^\s*Disallow\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _SITEMAP_DIRETIVA_RE = re.compile(r"^\s*Sitemap\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
