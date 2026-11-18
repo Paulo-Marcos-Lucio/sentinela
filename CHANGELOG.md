@@ -7,6 +7,19 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Corrigido — falso negativo de session-id na URL
+- **Identificador de sessão canônico (`jsessionid`/`phpsessid`/`sessionid`/`sid`/
+  `session_id`) na query string volta a gerar `DADO_SENSIVEL_NA_URL`.** A auditoria
+  2026-09-08 tirou `session` do conjunto de tokens de credencial para matar o falso
+  positivo de `sessionStorage` — e, ao tirar, também deixou de reconhecer um
+  identificador de sessão de verdade na URL (mesmo risco de sequestro de sessão por log/
+  histórico/`Referer`/cache que já sustenta o achado de credencial). A correção não
+  devolve `session` ao casamento por TOKEN (isso reintroduziria o FP: `sessionStorage`
+  tokeniza em `['session', 'storage']`); em vez disso, uma função dedicada
+  (`_e_identificador_de_sessao`) compara o NOME INTEIRO normalizado do parâmetro contra
+  uma lista fechada de identificadores canônicos. `sessionStorage` normaliza para
+  `sessionstorage`, que não está na lista — continua sem achado.
+
 ### Corrigido — calibração de falsos positivos (auditoria de campo)
 - **Nome de campo "sensível" agora casa por TOKEN inteiro, nunca por substring.** O
   reconhecedor de credencial/segredo em formulários e query string comparava por trecho

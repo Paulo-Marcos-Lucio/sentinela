@@ -79,6 +79,32 @@ def _tem_token_lgpd(name: str) -> bool:
     return any(t in _TOKENS_LGPD for t in _tokens_do_nome(name))
 
 
+# Identificadores CANÔNICOS de sessão na URL. Mesma gravidade de credencial (CWE-598): o
+# vazamento por log de servidor/histórico/Referer/cache é idêntico, só a origem do dado
+# é outra (sessão em vez de senha).
+_IDENTIFICADORES_DE_SESSAO_NA_URL = frozenset({"jsessionid", "phpsessid", "sessionid", "sid"})
+
+
+def _nome_normalizado(name: str) -> str:
+    """Nome do parâmetro sem acento, sem separador, minúsculo — para comparação por NOME
+    INTEIRO (não por token)."""
+    sem_acento = "".join(c for c in unicodedata.normalize("NFKD", name) if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]", "", sem_acento.lower())
+
+
+def _e_identificador_de_sessao(name: str) -> bool:
+    """O nome do parâmetro é, ele mesmo, um identificador de sessão canônico — não um nome
+    que meramente contém a sílaba 'session'.
+
+    Comparação por NOME INTEIRO normalizado (`session_id` -> `sessionid`, casa; `sid` casa;
+    `sessionStorage` -> `sessionstorage`, NÃO casa), de propósito: comparar por TOKEN (como
+    `_tem_token_credencial` faz para credencial) quebraria `session_id` em `['session',
+    'id']`, e colocar `session` nesse conjunto reintroduziria exatamente o falso positivo
+    de `sessionStorage` que a auditoria 2026-09-08 removeu (ela tokeniza em `['session',
+    'storage']` e 'session' sozinho já seria suficiente para casar por token)."""
+    return _nome_normalizado(name) in _IDENTIFICADORES_DE_SESSAO_NA_URL
+
+
 @dataclass(slots=True)
 class _Campo:
     name: str
@@ -383,27 +409,50 @@ class FormsChecker(Checker):
         `?cpf=` era tratado como credencial. Agora o casamento é por token inteiro e a
         semântica é separada — credencial na URL é grave (vaza acesso), cpf/cnpj é questão
         de privacidade/LGPD (severidade média), e nenhum nome que só CONTENHA a sílaba casa.
+
+        Identificador de sessão (`jsessionid`/`phpsessid`/`sessionid`/`sid`/`session_id`)
+        soma ao mesmo achado `DADO_SENSIVEL_NA_URL` — mesma gravidade e mesmo CWE-598 de
+        credencial — mas por casamento de NOME INTEIRO (`_e_identificador_de_sessao`), não
+        por token, para não reintroduzir o FP de `sessionStorage` (auditoria 2026-09-08).
         """
         params = parse_qsl(urlsplit(ctx.target.url).query, keep_blank_values=True)
         credenciais = list(dict.fromkeys(nome for nome, _ in params if _tem_token_credencial(nome)))
+        sessao = list(dict.fromkeys(nome for nome, _ in params if _e_identificador_de_sessao(nome)))
+        sensiveis = list(dict.fromkeys(credenciais + sessao))
         pessoais = list(dict.fromkeys(nome for nome, _ in params if _tem_token_lgpd(nome)))
-        if credenciais:
+        if sensiveis:
+            so_sessao = not credenciais and bool(sessao)
             yield Finding(
                 id="DADO_SENSIVEL_NA_URL",
-                title="Credencial na query string",
+                title="Identificador de sessão na query string"
+                if so_sessao
+                else "Credencial na query string",
                 category=self.category,
                 severity=Severity.HIGH,
                 description=(
-                    "A URL do alvo carrega parâmetro com nome de credencial "
-                    f"(`{'`, `'.join(credenciais)}`)."
-                ),
-                evidence=f"Parâmetro(s): {', '.join(credenciais)}",
+                    "A URL do alvo carrega parâmetro com identificador de sessão "
+                    if so_sessao
+                    else "A URL do alvo carrega parâmetro com nome de credencial "
+                )
+                + f"(`{'`, `'.join(sensiveis)}`).",
+                evidence=f"Parâmetro(s): {', '.join(sensiveis)}",
                 impact=(
-                    "Credencial na query string vaza por log de servidor, histórico do navegador, "
-                    "cabeçalho `Referer` enviado a terceiros e cache de proxy — mesmo sob HTTPS. "
-                    "Vaza sem que ninguém precise interceptar o tráfego."
+                    "Identificador de sessão na query string permite sequestro de sessão por "
+                    "quem ler o log de servidor, o histórico do navegador, o cabeçalho `Referer` "
+                    "ou o cache de proxy — mesmo sob HTTPS."
+                    if so_sessao
+                    else (
+                        "Credencial na query string vaza por log de servidor, histórico do "
+                        "navegador, cabeçalho `Referer` enviado a terceiros e cache de proxy — "
+                        "mesmo sob HTTPS. Vaza sem que ninguém precise interceptar o tráfego."
+                    )
                 ),
-                recommendation="Transporte segredo/credencial no corpo da requisição, nunca na URL.",
+                recommendation=(
+                    "Nunca propague o identificador de sessão pela URL; use cookie de sessão "
+                    "com `HttpOnly`/`Secure`/`SameSite`."
+                    if so_sessao
+                    else "Transporte segredo/credencial no corpo da requisição, nunca na URL."
+                ),
                 references=(ref.OWASP_INPUT_VALIDATION,),
             )
         if pessoais:

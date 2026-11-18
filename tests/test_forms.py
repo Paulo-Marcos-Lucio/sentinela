@@ -166,6 +166,8 @@ from hypothesis import strategies as st  # noqa: E402
 from sentinela.checks.forms import (  # noqa: E402
     _A_HANDLER_JS,
     _CSRF,
+    _e_identificador_de_sessao,
+    _nome_normalizado,
     _tem_token_credencial,
     _tem_token_lgpd,
 )
@@ -297,3 +299,52 @@ def test_post_sem_token_algum_ainda_exige_csrf() -> None:
     # O lado oposto: um POST sem NENHUM token reconhecido continua sendo achado real.
     html = '<form method="post" action="/c"><input name="txt"></form>'
     assert "CSRF_TOKEN_AUSENTE" in _ids("https://a/c", html)
+
+
+# --- Classe 6: fn-session-id-na-url (AUD0908) ----------------------------- #
+# INVARIANTE: identificador de sessão CANÔNICO na URL casa por NOME INTEIRO normalizado;
+# `sessionStorage` (substring/token "session") nunca casa — essa é a regressão que a
+# auditoria 2026-09-08 abriu ao tirar 'session' do conjunto de tokens de credencial.
+_IDENTIFICADORES_DE_SESSAO_CANONICOS = frozenset({"jsessionid", "phpsessid", "sessionid", "sid"})
+
+
+def test_identificador_de_sessao_canonico_na_url_e_detectado() -> None:
+    for nome in ("jsessionid", "JSESSIONID", "phpsessid", "sessionid", "sid", "session_id"):
+        assert _e_identificador_de_sessao(nome), nome
+        ids = _ids(f"https://a/x?{nome}=ABC123XYZ", "<html>ok</html>")
+        assert "DADO_SENSIVEL_NA_URL" in ids, nome
+
+
+def test_sessionstorage_na_url_nao_e_identificador_de_sessao() -> None:
+    # O FP que motivou tirar 'session' do casamento por token: sessionStorage NÃO é
+    # jsessionid/phpsessid/sessionid/sid, e o checker não pode voltar a acusá-lo.
+    assert not _e_identificador_de_sessao("sessionStorage")
+    ids = _ids("https://a/x?sessionStorage=1", "<html>ok</html>")
+    assert "DADO_SENSIVEL_NA_URL" not in ids
+
+
+def test_titulo_do_achado_distingue_sessao_de_credencial() -> None:
+    so_sessao = _findings("https://a/x?jsessionid=ABC", "<html>ok</html>")
+    achado = next(f for f in so_sessao if f.id == "DADO_SENSIVEL_NA_URL")
+    assert "sessão" in achado.title.lower()
+
+    so_credencial = _findings("https://a/x?access_token=ABCDEF", "<html>ok</html>")
+    achado2 = next(f for f in so_credencial if f.id == "DADO_SENSIVEL_NA_URL")
+    assert "credencial" in achado2.title.lower()
+
+
+@given(
+    ruido=st.text(
+        alphabet="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-",
+        min_size=1,
+        max_size=12,
+    )
+)
+def test_property_session_so_casa_identificador_canonico_nunca_substring_solta(ruido: str) -> None:
+    # Colar algo a "session" (prefixo ou sufixo) só pode continuar casando se o resultado
+    # NORMALIZADO ainda for um dos identificadores canônicos (ex.: sufixo "_id" produz
+    # "sessionid", que É canônico). Fora disso, nenhuma colagem pode casar — é a
+    # propriedade que travaria uma regressão para casamento por substring/token solto.
+    for candidato in (f"session{ruido}", f"{ruido}session"):
+        se_deveria_casar = _nome_normalizado(candidato) in _IDENTIFICADORES_DE_SESSAO_CANONICOS
+        assert _e_identificador_de_sessao(candidato) == se_deveria_casar, candidato
