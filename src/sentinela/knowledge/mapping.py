@@ -15,6 +15,27 @@ from dataclasses import dataclass
 # para saber que `A03` de 2025 e `A03` de 2021 significam coisas OPOSTAS.
 OWASP_EDICAO = "2025"
 
+# Escopo real de A01:2025 Broken Access Control nesta ferramenta (auditoria FN/FP
+# 2026-09-08, item AUD0908-fn-idor-e-a01-fora-de-cobertura-do-motor). Todo achado tagueado
+# A01 em `_TAGS` abaixo é CSRF (ausência de token sincronizador) ou CORS (reflexão/curinga
+# com credenciais) — contorno de controle de acesso que se enxerga sem autenticação. Isto
+# NÃO cobre controle de acesso POR OBJETO: IDOR (sonda de segmento numérico em path) e
+# qualquer variação de identidade via header/cookie de sessão exigem múltiplas identidades
+# autenticadas e uma especificação de qual resposta é "autorizada" — sem as duas, uma
+# sondagem black-box não distingue autorização legítima de vazamento, e produziria
+# FP/FN sem base nenhuma. Nenhum achado abaixo representa cobertura de IDOR;
+# docs/metodologia.md repete as mesmas frases-chave (IDOR, "segmento numérico em path",
+# "identidade via header/cookie", "múltiplas identidades autenticadas") para a declaração
+# não ficar só no código-fonte — `tests/test_escopo_a01_idor.py` trava as duas pontas.
+A01_ESCOPO = (
+    "A01:2025 Broken Access Control aqui cobre CSRF e CORS (contorno de controle de "
+    "acesso detectável sem autenticação). NÃO cobre IDOR nem controle de acesso por "
+    "objeto — sonda de segmento numérico em path, variação de identidade via "
+    "header/cookie — porque isso exige múltiplas identidades autenticadas e uma "
+    "especificação do que é 'autorizado'; black-box sem essas duas entradas não tem "
+    "base para afirmar o achado."
+)
+
 # Rótulos OWASP Top 10:2025 (owasp.org/Top10/2025/)
 A01 = "A01:2025 Broken Access Control"
 A02 = "A02:2025 Security Misconfiguration"

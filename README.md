@@ -17,7 +17,7 @@
 [![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
-[![481 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-qualidade-de-engenharia--método)
+[![486 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-qualidade-de-engenharia--método)
 [![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-qualidade-de-engenharia--método)
 
 </div>
@@ -53,6 +53,15 @@ Esse "básico" é justamente o que um diagnóstico bem-feito encontra **antes** 
 | **DNS / E-mail** | SPF, DMARC (política), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
 
 Cada achado vem com **severidade** (ancorada nas faixas do CVSS), **evidência**, **impacto**, **recomendação prática** e **referências** (OWASP, MDN, RFC), além da classificação **OWASP Top 10:2025 + CWE**.
+
+> **A1 na tabela acima é CSRF e CORS — não é IDOR.** Todo achado marcado `A01` é
+> contorno de controle de acesso detectável sem autenticação (ausência de token
+> anti-CSRF, reflexão/curinga de CORS). IDOR e controle de acesso por objeto — sonda de
+> segmento numérico em path, variação de identidade via header/cookie — exigem
+> múltiplas identidades autenticadas e uma especificação de qual resposta é
+> "autorizada"; sem as duas, uma sondagem black-box não distingue autorização legítima
+> de vazamento, e a Sentinela não anuncia uma cobertura que a descoberta não alcança
+> (detalhe em [`docs/metodologia.md`](docs/metodologia.md#3-mapeamento-owasp-top-102025--cwe)).
 
 > **A fronteira passivo↔ativo é explícita — de propósito.** O checker `forms` é a fatia de injeção que dá para avaliar com honestidade sem enviar payload: ele lê apenas o HTML que o motor já baixou uma vez e sinaliza a *superfície* (isto é uma superfície de ataque), sem nunca afirmar que ela é explorável (isto dispararia de fato) — porque não mandou nada para provar. Em bateria de campo contra um laboratório controlado, essa camada passiva mediu **precisão/recall de 0,909**, com a classe `SENHA_EM_GET` em **1,00**. A **confirmação ativa** — provar SQLi/XSS com um marcador inerte — é da edição Pro (seção **🔓 Versão Pro**, abaixo), gated e sob autorização.
 >
@@ -267,7 +276,7 @@ As checagens **nunca** falam com a rede diretamente: recebem um objeto `Probe` i
 
 ## 🔬 Qualidade de engenharia & método
 
-**Portões, medidos agora (não aspiração):** 481 testes (incluindo property-based com Hypothesis) · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 44 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
+**Portões, medidos agora (não aspiração):** 486 testes (incluindo property-based com Hypothesis) · cobertura 93% (gate anti-regressão `--cov-fail-under=90`) · `mypy --strict` limpo em 44 arquivos · `ruff` lint+format limpo — com as regras de segurança `S`/bandit e `B`/bugbear ligadas · CI em matriz Python **3.10 / 3.11 / 3.12 / 3.13**. O `make test`, o `pre-commit` e o CI rodam o mesmo comando: não existe gate que só passa na minha máquina.
 
 **Teste que não aceita fachada.** Além do caminho-feliz, a suíte tem invariantes e testes cronometrados que voltam vermelhos se a detecção for desfeita ou degradada. Exemplos reais do repo: `test_corpo_hostil_nao_trava_a_varredura` cronometra a extração de formulários contra um corpo hostil de 256 KB e **falha se passar de 1 s** — trava por SHA a regressão de DoS (o `HTMLParser` da stdlib levava >120 s); e `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` prova a propriedade de que acrescentar um achado **nunca** melhora a nota — recalibrar a curva sem querer fica vermelho.
 

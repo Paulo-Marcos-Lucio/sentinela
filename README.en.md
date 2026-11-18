@@ -19,7 +19,7 @@
 [![Ruff lint](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-ruff.svg)](https://github.com/astral-sh/ruff)
 [![Checked with mypy](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-mypy.svg)](https://mypy-lang.org/)
 [![OWASP Top 10:2025](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-owasp.svg)](https://owasp.org/Top10/2025/)
-[![481 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
+[![486 tests passing](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-tests.svg)](#-engineering-quality--method)
 [![93% coverage](https://raw.githubusercontent.com/Paulo-Marcos-Lucio/sentinela/main/assets/chip-coverage.svg)](#-engineering-quality--method)
 
 </div>
@@ -54,6 +54,15 @@ This "basic" layer is exactly what a well-executed diagnostic finds **before** t
 | **DNS / Email** | SPF, DMARC (policy), CAA, DNSSEC, **MTA-STS**, **TLS-RPT** | A02 / A04 / A07 |
 
 Each finding comes with **severity** (anchored to CVSS ranges), **evidence**, **impact**, **practical recommendation**, and **references** (OWASP, MDN, RFC), plus the **OWASP Top 10:2025 + CWE** classification.
+
+> **A01 in the table above is CSRF and CORS — not IDOR.** Every finding tagged `A01`
+> is an access-control bypass detectable without authentication (missing anti-CSRF
+> token, CORS reflection/wildcard). IDOR and object-level access control — probing a
+> numeric path segment, swapping identity via header/cookie — require multiple
+> authenticated identities and a spec of what an "authorized" response looks like;
+> without both, a black-box probe can't tell legitimate authorization from a leak, and
+> Sentinela doesn't advertise coverage the scan can't actually reach (details in
+> [`docs/metodologia.md`](docs/metodologia.md#3-mapeamento-owasp-top-102025--cwe), PT-BR).
 
 > **The passive↔active boundary is explicit — by design.** The `forms` checker is the slice of injection that can be honestly evaluated without sending a payload: it only reads the HTML the engine already downloaded once and flags the *surface* (this is an attack surface), without ever claiming it is exploitable (this would actually trigger it) — because it sent nothing to prove it. In a field trial against a controlled lab, this passive layer measured **0.909 precision/recall**, with the `SENHA_EM_GET` class at **1.00**. **Active confirmation** — proving SQLi/XSS with an inert marker — belongs to the Pro edition (see **🔓 Pro Edition** section below), gated and subject to authorization.
 >
@@ -268,7 +277,7 @@ Checks **never** talk to the network directly: they receive an immutable `Probe`
 
 ## 🔬 Engineering quality & method
 
-**Gates, measured right now (not aspiration):** 481 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 44 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
+**Gates, measured right now (not aspiration):** 486 tests (including property-based tests with Hypothesis) · 93% coverage (anti-regression gate `--cov-fail-under=90`) · `mypy --strict` clean across 44 files · `ruff` lint+format clean — with the `S`/bandit and `B`/bugbear security rules enabled · CI on a Python **3.10 / 3.11 / 3.12 / 3.13** matrix. `make test`, `pre-commit`, and CI all run the same command: there's no gate that only passes on my machine.
 
 **Tests that don't accept a facade.** Beyond the happy path, the suite has invariant and timed tests that go red if detection is undone or degraded. Real examples from the repo: `test_corpo_hostil_nao_trava_a_varredura` times form extraction against a 256 KB hostile body and **fails if it exceeds 1 s** — locking the DoS regression down by SHA (the stdlib's `HTMLParser` took >120 s); and `test_nota_e_monotonica_acrescentar_achado_nunca_melhora` proves the property that adding a finding **never** improves the score — accidentally recalibrating the curve turns it red.
 
