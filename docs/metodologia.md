@@ -49,6 +49,17 @@ do Top 10. As checagens não-intrusivas concentram sinal em duas categorias:
 
 Sinais parciais tocam **A01** (CORS/CSRF), **A07** (autenticação/e-mail spoofing) e outras.
 
+> **Escopo real de A01, sem rodeio:** todo achado tagueado `A01:2025 Broken Access
+> Control` nesta ferramenta é CSRF (ausência de token sincronizador) ou CORS
+> (reflexão/curinga com credenciais) — contorno de controle de acesso detectável sem
+> autenticação. Isto **não** cobre IDOR nem controle de acesso por objeto — sonda de
+> segmento numérico em path, variação de identidade via header/cookie — porque isso
+> exige múltiplas identidades autenticadas e uma especificação de qual resposta é
+> "autorizada"; sem as duas entradas, uma sondagem black-box não tem base para afirmar
+> o achado. As mesmas frases-chave vivem em código, em
+> [`knowledge/mapping.A01_ESCOPO`](../src/sentinela/knowledge/mapping.py), para a
+> declaração não depender só de prosa que pode ficar desatualizada em silêncio.
+
 ## 4. Nota de higiene (0–100)
 
 A nota parte de 100 e subtrai um peso por achado, conforme a severidade

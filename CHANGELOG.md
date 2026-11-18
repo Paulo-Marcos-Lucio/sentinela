@@ -7,6 +7,20 @@ projeto adota [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+### Documentado — escopo real de A01 (IDOR não é CSRF/CORS)
+- **Declaração explícita de que A01:2025 Broken Access Control, nesta ferramenta, é
+  CSRF e CORS — não IDOR.** A tabela "O que a Sentinela verifica" tagueia Cookies/CORS/
+  Forms com `A01`, mas nenhum desses achados testa controle de acesso por OBJETO (IDOR):
+  isso exigiria sondar segmento numérico em path e variar identidade via header/cookie
+  com múltiplas identidades autenticadas e uma especificação de qual resposta é
+  "autorizada" — nada disso é possível em black-box sem spec. Adicionada a constante
+  `knowledge.mapping.A01_ESCOPO` e repetidas as mesmas frases-chave em
+  `docs/metodologia.md`, `README.md` e `README.en.md`, para a ressalva não ficar só em
+  prosa que pode ficar desatualizada em silêncio. `tests/test_escopo_a01_idor.py` trava
+  tanto o conjunto real de achados A01 (hoje restrito a CSRF+CORS — um achado A01 novo
+  quebra o teste até alguém decidir de propósito) quanto a presença das frases-chave nos
+  quatro lugares.
+
 ### Corrigido — calibração de falsos positivos (auditoria de campo)
 - **Nome de campo "sensível" agora casa por TOKEN inteiro, nunca por substring.** O
   reconhecedor de credencial/segredo em formulários e query string comparava por trecho
